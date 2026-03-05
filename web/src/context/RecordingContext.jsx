@@ -23,6 +23,13 @@ const UPLOAD_MAX_TRIES = 8; // não aborta; depois marca como problema e segue
 const UPLOAD_BACKOFF_BASE_MS = 600;
 const UPLOAD_BACKOFF_MAX_MS = 8000;
 
+// ✅ GitHub workflow dispatch (teste via VITE_*)
+const GITHUB_REF = import.meta.env.VITE_GITHUB_REF || "main";
+const GITHUB_USER = import.meta.env.VITE_GITHUB_USER;
+const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO;
+const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+const WORKFLOW_FILE = "processar_video.yml";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -53,6 +60,31 @@ async function withRetry(fn, { retries = 3, baseDelayMs = 600 } = {}) {
     }
   }
   throw lastErr;
+}
+
+// ✅ Disparar workflow manualmente (SEM reuniao_id)
+async function dispatchProcessarVideoWorkflow() {
+  if (!GITHUB_USER || !GITHUB_REPO || !GITHUB_TOKEN) {
+    throw new Error("GitHub envs não configuradas (VITE_GITHUB_USER/REPO/TOKEN)");
+  }
+
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: GITHUB_REF }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Dispatch falhou (${res.status}): ${txt}`);
+  }
 }
 
 /* =========================
@@ -695,7 +727,7 @@ export function RecordingProvider({ children }) {
     }
   };
 
-  // 🔥 VERSÃO AUTO-CONCLUDE (SEM BACKEND NECESSÁRIO)
+  // 🔥 FINALIZE (ENCERRA -> ENFILEIRA -> DISPARA WORKFLOW SEM REUNIAO_ID)
   const finalizeRecording = async () => {
     const reuniaoId = reuniaoIdRef.current;
     const sessionId = sessionIdRef.current;
@@ -717,9 +749,9 @@ export function RecordingProvider({ children }) {
         ? Math.floor((Date.now() - startTimeRef.current) / 1000)
         : timer;
 
-      // ✅ aponta para part 1 para não travar no "Processando"
       const firstPartPath = buildPartPath(reuniaoId, sessionId, 1);
 
+      // 1) Marca reunião como PROCESSANDO (worker vai gerar mp4/m4a)
       await withRetry(async () => {
         const { error } = await supabase
           .from("reunioes")
@@ -727,7 +759,7 @@ export function RecordingProvider({ children }) {
             status: "Realizada",
             duracao_segundos: duracao,
             gravacao_fim: nowIso(),
-            gravacao_status: "CONCLUIDO",
+            gravacao_status: "PROCESSANDO",
             gravacao_path: firstPartPath,
             gravacao_bucket: STORAGE_BUCKET,
             updated_at: nowIso(),
@@ -736,7 +768,33 @@ export function RecordingProvider({ children }) {
         if (error) throw error;
       });
 
-      addLog("🎉 VÍDEO DISPONÍVEL!");
+      // 2) Enfileira job PROCESSANDO (sem duplicar)
+      await withRetry(async () => {
+        const { data: existing, error: e1 } = await supabase
+          .from("reuniao_processing_queue")
+          .select("id,status")
+          .eq("reuniao_id", reuniaoId)
+          .in("status", ["PROCESSANDO", "PROCESSANDO_GITH"])
+          .limit(1);
+
+        if (e1) throw e1;
+
+        if (!existing || existing.length === 0) {
+          const { error: e2 } = await supabase.from("reuniao_processing_queue").insert([
+            {
+              reuniao_id: reuniaoId,
+              status: "PROCESSANDO",
+              log_text: "Front-end: Encerrado. Aguardando compilação (mp4 + m4a).",
+            },
+          ]);
+          if (e2) throw e2;
+        }
+      });
+
+      // 3) Dispara workflow manualmente (SEM ID)
+      addLog("✅ Encerrado. Disparando processamento no GitHub...");
+      await withRetry(() => dispatchProcessarVideoWorkflow(), { retries: 3, baseDelayMs: 800 });
+      addLog("🎉 Processamento disparado! (worker vai pegar 1 PROCESSANDO da fila)");
     } catch (e) {
       await finalizeFailClosed(reuniaoId, e?.message || e);
     } finally {
