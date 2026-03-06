@@ -297,7 +297,7 @@ function inferTipoFromTitulo(titulo) {
 
 function groupKeyForAta(ata, groupBy) {
   if (groupBy === "DIA") return toBRDayKey(ata?.data_hora || ata?.gravacao_inicio);
-  if (groupBy === "TIPO") return inferTipoFromTitulo(ata?.titulo);
+  if (groupBy === "TIPO") return String(ata?.tipo_reuniao || "Sem tipo").trim();
   return String(ata?.titulo || "Sem título").trim();
 }
 
@@ -1085,7 +1085,7 @@ Estrutura obrigatória:
           {/* ✅ NOVO: lista agrupada */}
           <div className="flex-1 overflow-y-auto">
             {groupedAtas.map((g) => {
-              const isOpen = openGroups[g.key] ?? true; // default aberto
+              const isOpen = openGroups[g.key] ?? false; // default FECHADO
 
               return (
                 <div key={g.key} className="border-b border-slate-100">
