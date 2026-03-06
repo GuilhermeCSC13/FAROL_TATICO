@@ -270,6 +270,37 @@ function formatAtaMarkdown(raw, { titulo, dataBR } = {}) {
   return ensureSpacing(t);
 }
 
+// ✅ HELPERS (NOVO): Agrupamento sidebar
+function toBRDayKey(dateStr) {
+  if (!dateStr) return "Sem data";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "Sem data";
+  return d.toLocaleDateString("pt-BR");
+}
+
+function inferTipoFromTitulo(titulo) {
+  const t = String(titulo || "").toUpperCase();
+
+  // ajuste livre aqui com os nomes que vocês usam
+  if (/\bDBO\b/.test(t)) return "DBO";
+  if (t.includes("COMITÊ") || t.includes("COMITE")) return "Comitê";
+  if (t.includes("CAFÉ") || t.includes("CAFE")) return "Café com Gestão";
+  if (t.includes("PCM")) return "PCM";
+  if (t.includes("S.O.S") || t.includes("SOS")) return "SOS";
+  if (t.includes("TRATATIVA")) return "Tratativas";
+  if (t.includes("FAROL")) return "Farol";
+  if (t.includes("OPERACIONAL")) return "Operacional";
+  if (t.includes("TÁTICO") || t.includes("TATICO")) return "Tático";
+
+  return "Outros";
+}
+
+function groupKeyForAta(ata, groupBy) {
+  if (groupBy === "DIA") return toBRDayKey(ata?.data_hora || ata?.gravacao_inicio);
+  if (groupBy === "TIPO") return inferTipoFromTitulo(ata?.titulo);
+  return String(ata?.titulo || "Sem título").trim();
+}
+
 // --- COMPONENTE PLAYER DE ÁUDIO ---
 const CustomAudioPlayer = ({ src, durationDb }) => {
   const audioRef = useRef(null);
@@ -376,6 +407,10 @@ export default function CentralAtas() {
   const [atas, setAtas] = useState([]);
   const [selectedAta, setSelectedAta] = useState(null);
   const [busca, setBusca] = useState("");
+
+  // ✅ NOVO: organizar lista na sidebar
+  const [groupBy, setGroupBy] = useState("DIA"); // "DIA" | "TIPO" | "NOME"
+  const [openGroups, setOpenGroups] = useState({}); // { [groupKey]: boolean }
 
   const [mediaUrls, setMediaUrls] = useState({ video: null, audio: null });
 
@@ -902,7 +937,13 @@ Estrutura obrigatória:
     if (!delLogin || !delSenha) return alert("Informe Login e Senha.");
     setDeleting(true);
     try {
-      const { data: usuario, error: errAuth } = await supabaseInove.from("usuarios_aprovadores").select("*").eq("login", delLogin).eq("senha", delSenha).eq("ativo", true).maybeSingle();
+      const { data: usuario, error: errAuth } = await supabaseInove
+        .from("usuarios_aprovadores")
+        .select("*")
+        .eq("login", delLogin)
+        .eq("senha", delSenha)
+        .eq("ativo", true)
+        .maybeSingle();
       if (errAuth || !usuario || usuario.nivel !== "Administrador") {
         alert("Apenas Administradores.");
         setDeleting(false);
@@ -918,8 +959,38 @@ Estrutura obrigatória:
   };
 
   const atasFiltradas = useMemo(() => {
-    return atas.filter((a) => (a.titulo || "").toLowerCase().includes(busca.toLowerCase()));
+    const q = String(busca || "").toLowerCase().trim();
+    if (!q) return atas || [];
+    return (atas || []).filter((a) => String(a.titulo || "").toLowerCase().includes(q));
   }, [atas, busca]);
+
+  // ✅ NOVO: grupos para a sidebar
+  const groupedAtas = useMemo(() => {
+    const map = new Map(); // key -> atas[]
+    for (const ata of atasFiltradas) {
+      const k = groupKeyForAta(ata, groupBy);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(ata);
+    }
+
+    // ordena atas dentro do grupo por data desc
+    for (const [k, arr] of map.entries()) {
+      arr.sort((a, b) => new Date(b.data_hora) - new Date(a.data_hora));
+    }
+
+    const entries = Array.from(map.entries()).map(([key, items]) => {
+      const refDate = items?.[0]?.data_hora ? new Date(items[0].data_hora).getTime() : 0;
+      return { key, items, refDate };
+    });
+
+    // ordenação dos grupos:
+    // DIA: mais recente primeiro
+    // TIPO/NOME: alfabético
+    if (groupBy === "DIA") entries.sort((a, b) => b.refDate - a.refDate);
+    else entries.sort((a, b) => String(a.key).localeCompare(String(b.key), "pt-BR"));
+
+    return entries;
+  }, [atasFiltradas, groupBy]);
 
   const getFileName = (path) => (path ? path.split("/").pop() : "Arquivo desconhecido");
 
@@ -991,19 +1062,69 @@ Estrutura obrigatória:
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Layers size={20} className="text-blue-600" /> Atas
             </h2>
+
             <input className="mt-4 w-full bg-slate-50 border p-2 rounded text-sm" placeholder="Buscar..." value={busca} onChange={(e) => setBusca(e.target.value)} />
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {atasFiltradas.map((ata) => (
-              <button
-                key={ata.id}
-                onClick={() => setSelectedAta(ata)}
-                className={`w-full text-left p-4 border-b ${selectedAta?.id === ata.id ? "bg-blue-50 border-l-4 border-l-blue-600" : "hover:bg-slate-50"}`}
+
+            {/* ✅ NOVO: Organizar por */}
+            <div className="mt-3">
+              <select
+                className="w-full bg-slate-50 border p-2 rounded text-xs text-slate-700"
+                value={groupBy}
+                onChange={(e) => {
+                  setGroupBy(e.target.value);
+                  setOpenGroups({});
+                }}
               >
-                <h3 className="font-bold text-sm text-slate-700">{ata.titulo}</h3>
-                <span className="text-xs text-slate-400">{new Date(ata.data_hora).toLocaleDateString()}</span>
-              </button>
-            ))}
+                <option value="DIA">Organizar por: Dia</option>
+                <option value="TIPO">Organizar por: Tipo</option>
+                <option value="NOME">Organizar por: Nome</option>
+              </select>
+            </div>
+          </div>
+
+          {/* ✅ NOVO: lista agrupada */}
+          <div className="flex-1 overflow-y-auto">
+            {groupedAtas.map((g) => {
+              const isOpen = openGroups[g.key] ?? true; // default aberto
+
+              return (
+                <div key={g.key} className="border-b border-slate-100">
+                  <button
+                    onClick={() => setOpenGroups((p) => ({ ...p, [g.key]: !isOpen }))}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border-b border-slate-100"
+                    title="Abrir/Fechar"
+                  >
+                    <div className="text-left min-w-0">
+                      <div className="text-[11px] font-black text-slate-700 truncate">{g.key}</div>
+                      <div className="text-[10px] text-slate-400">{g.items.length} ata(s)</div>
+                    </div>
+                    <div className="text-slate-400 text-xs font-black">{isOpen ? "—" : "+"}</div>
+                  </button>
+
+                  {isOpen && (
+                    <div>
+                      {g.items.map((ata) => (
+                        <button
+                          key={ata.id}
+                          onClick={() => setSelectedAta(ata)}
+                          className={`w-full text-left p-4 border-b border-slate-100 ${
+                            selectedAta?.id === ata.id ? "bg-blue-50 border-l-4 border-l-blue-600" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <h3 className="font-bold text-sm text-slate-700">{ata.titulo}</h3>
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-xs text-slate-400">{ata.data_hora ? new Date(ata.data_hora).toLocaleDateString() : "-"}</span>
+                            {getStatusBadge(ata.gravacao_status)}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {groupedAtas.length === 0 && <div className="p-4 text-xs text-slate-400 italic">Nenhuma ata encontrada.</div>}
           </div>
         </div>
 
@@ -1051,7 +1172,8 @@ Estrutura obrigatória:
                         </span>
                         <span className="flex items-center gap-1.5 text-slate-700 font-medium">
                           <Clock size={16} className="text-slate-400" />
-                          {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"} {" - "}
+                          {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}{" "}
+                          {" - "}
                           {selectedAta.gravacao_fim ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
                         </span>
                       </div>
@@ -1286,11 +1408,7 @@ Estrutura obrigatória:
                               className="flex items-center justify-between bg-white border border-slate-100 p-2 rounded-lg shadow-sm hover:shadow-md transition-shadow"
                             >
                               <div className="flex items-center gap-3 overflow-hidden">
-                                <div
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                    isImage ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
-                                  }`}
-                                >
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isImage ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"}`}>
                                   {isImage ? <ImageIcon size={16} /> : <FileText size={16} />}
                                 </div>
                                 <div className="min-w-0">
@@ -1350,13 +1468,9 @@ Estrutura obrigatória:
 
                             <span className="flex items-center gap-1.5">
                               <Clock size={16} className="text-slate-400" />
-                              {selectedAta.gravacao_inicio
-                                ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                                : "--:--"}{" "}
+                              {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}{" "}
                               -{" "}
-                              {selectedAta.gravacao_fim
-                                ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                                : "--:--"}
+                              {selectedAta.gravacao_fim ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
                             </span>
                           </div>
 
