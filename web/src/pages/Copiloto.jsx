@@ -25,13 +25,11 @@ import {
   MessageSquare,
   Paperclip,
   Download,
-  // Novos icones para a chamada
   Crown,
   UserCheck,
   CheckCircle2,
   XCircle,
   Mail,
-  Users
 } from "lucide-react";
 import { useRecording } from "../context/RecordingContext";
 import ModalDetalhesAcao from "../components/tatico/ModalDetalhesAcao";
@@ -156,69 +154,53 @@ export default function Copiloto() {
   const { isRecording, isProcessing, timer, startRecording, stopRecording, current } =
     useRecording();
 
-  // filtros esquerda
   const [dataFiltro, setDataFiltro] = useState(
     new Date().toISOString().split("T")[0]
   );
   const [busca, setBusca] = useState("");
 
-  // reuniões
   const [reunioes, setReunioes] = useState([]);
   const [selecionada, setSelecionada] = useState(null);
   const [nomeTipoReuniao, setNomeTipoReuniao] = useState("");
 
-  // ======================
-  // ✅ NOVOS ESTADOS PARA CHAMADA
-  // ======================
   const [participantesLista, setParticipantesLista] = useState([]);
   const [organizadorDetalhes, setOrganizadorDetalhes] = useState(null);
   const [loadingParticipantes, setLoadingParticipantes] = useState(false);
 
-  // tabs direita
-  // ✅ Mudança: 'presenca' agora é uma tab possível e será a padrão
-  const [tab, setTab] = useState("presenca"); 
+  const [tab, setTab] = useState("presenca");
 
-  // Atas
   const [ataPrincipal, setAtaPrincipal] = useState("");
   const [ataManual, setAtaManual] = useState("");
   const [editAtaManual, setEditAtaManual] = useState(false);
 
-  // Ações
   const [loadingAcoes, setLoadingAcoes] = useState(false);
   const [acoesDaReuniao, setAcoesDaReuniao] = useState([]);
   const [acoesPendentesTipo, setAcoesPendentesTipo] = useState([]);
   const [acoesConcluidasDesdeUltima, setAcoesConcluidasDesdeUltima] = useState([]);
-  const [acaoTab, setAcaoTab] = useState("reuniao"); // reuniao | backlog | desde_ultima
+  const [acaoTab, setAcaoTab] = useState("reuniao");
 
-  // Criação de Ação
   const [novaAcao, setNovaAcao] = useState({
     descricao: "",
     observacao: "",
     responsavelId: "",
     vencimento: "",
   });
-  const [novasEvidenciasAcao, setNovasEvidenciasAcao] = useState([]); // File[]
+  const [novasEvidenciasAcao, setNovasEvidenciasAcao] = useState([]);
   const [creatingAcao, setCreatingAcao] = useState(false);
 
-  // Responsáveis
   const [listaResponsaveis, setListaResponsaveis] = useState([]);
   const [loadingResponsaveis, setLoadingResponsaveis] = useState(false);
 
-  // Usuário Logado (visual)
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Responsável autocomplete
   const [responsavelQuery, setResponsavelQuery] = useState("");
   const [respOpen, setRespOpen] = useState(false);
 
-  // Modal Ação (Central)
   const [acaoSelecionada, setAcaoSelecionada] = useState(null);
 
-  // Reabrir (ADM)
   const [showUnlock, setShowUnlock] = useState(false);
   const [senhaAdm, setSenhaAdm] = useState("");
 
-  // safe set
   const isMountedRef = useRef(false);
   const safeSet = (fn) => {
     if (isMountedRef.current) fn();
@@ -297,12 +279,11 @@ export default function Copiloto() {
   useEffect(() => {
     if (!selecionada?.id) return;
 
-    // ✅ Resetar para a primeira aba sempre que trocar reunião
     setTab("presenca");
-    
+
     carregarAtas(selecionada);
     fetchAcoes(selecionada);
-    fetchParticipantesEOrganizador(selecionada); // ✅ Busca dados da chamada
+    fetchParticipantesEOrganizador(selecionada);
 
     setAcaoTab("reuniao");
 
@@ -351,7 +332,6 @@ export default function Copiloto() {
 
   /* =========================
      Fetch Participantes e Organizador
-     (LÓGICA PRINCIPAL DE MESCLAGEM CORRIGIDA)
   ========================= */
   const fetchParticipantesEOrganizador = async (r) => {
     if (!r?.id) return;
@@ -360,7 +340,6 @@ export default function Copiloto() {
     setOrganizadorDetalhes(null);
 
     try {
-      // 1. Organizador
       let orgId = r.responsavel_id;
       let orgManual = r.responsavel;
 
@@ -384,13 +363,11 @@ export default function Copiloto() {
         setOrganizadorDetalhes({ nome: orgManual, sobrenome: "", email: "-" });
       }
 
-      // 2. Fetch Participantes SALVOS na reunião (inclui manuais sem usuario_id)
       const { data: salvosReuniao } = await supabase
         .from("participantes_reuniao")
         .select("*")
         .eq("reuniao_id", r.id);
 
-      // 3. Fetch Participantes PADRÃO do Tipo (se existir)
       let padraoTipo = [];
       if (r.tipo_reuniao_id) {
         const { data: defs } = await supabase
@@ -400,41 +377,32 @@ export default function Copiloto() {
         padraoTipo = defs || [];
       }
 
-      // 4. MESCLAGEM
-      // Objetivo: Mostrar todos que estão salvos na reunião + Todos do padrão que AINDA NÃO foram salvos
-      
       const listaFinal = [];
-      const salvosMap = new Map(); // Mapa para controle dos que têm usuario_id (para não duplicar com padrão)
-      
-      // Adiciona TODOS os que já estão no banco (Manuais + Padrão já salvo)
-      (salvosReuniao || []).forEach(p => {
+      const salvosMap = new Map();
+
+      (salvosReuniao || []).forEach((p) => {
         listaFinal.push(p);
         if (p.usuario_id) {
-            salvosMap.set(String(p.usuario_id), true);
+          salvosMap.set(String(p.usuario_id), true);
         }
       });
 
-      // Adiciona os do padrão APENAS se ainda não estiverem na lista (baseado no usuario_id)
-      padraoTipo.forEach(padrao => {
+      padraoTipo.forEach((padrao) => {
         if (!salvosMap.has(String(padrao.usuario_id))) {
-             // Cria objeto visual para exibir na lista (ainda não salvo na reunião)
-             listaFinal.push({
-                id: `temp_${padrao.usuario_id}`, // ID temporário
-                reuniao_id: r.id,
-                usuario_id: padrao.usuario_id,
-                nome: padrao.nome,
-                email: padrao.email,
-                presente: false, // Padrão ausente até clicar
-                is_temp: true
-              });
+          listaFinal.push({
+            id: `temp_${padrao.usuario_id}`,
+            reuniao_id: r.id,
+            usuario_id: padrao.usuario_id,
+            nome: padrao.nome,
+            email: padrao.email,
+            presente: false,
+            is_temp: true,
+          });
         }
       });
 
-      // Ordenar por nome
       listaFinal.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-
       setParticipantesLista(listaFinal);
-
     } finally {
       setLoadingParticipantes(false);
     }
@@ -442,29 +410,29 @@ export default function Copiloto() {
 
   const togglePresenca = async (participante) => {
     if (!selecionada?.id) return;
-    
+
     const reuniaoFinalizada =
-    String(selecionada?.status || "").trim().toUpperCase() === "REALIZADA";
-  if (reuniaoFinalizada) return;
-    
+      String(selecionada?.status || "").trim().toUpperCase() === "REALIZADA";
+    if (reuniaoFinalizada) return;
+
     const novoStatus = !participante.presente;
 
-    // Atualização Otimista na UI
-    setParticipantesLista(prev => prev.map(p => 
-      (p.id === participante.id || (p.is_temp && p.usuario_id === participante.usuario_id))
-        ? { ...p, presente: novoStatus } 
-        : p
-    ));
+    setParticipantesLista((prev) =>
+      prev.map((p) =>
+        p.id === participante.id || (p.is_temp && p.usuario_id === participante.usuario_id)
+          ? { ...p, presente: novoStatus }
+          : p
+      )
+    );
 
     if (participante.is_temp) {
-      // INSERT na tabela participantes_reuniao (padrão que ainda não existia)
       const payload = {
         reuniao_id: selecionada.id,
         usuario_id: participante.usuario_id,
         nome: participante.nome,
         email: participante.email,
         presente: novoStatus,
-        created_at: nowIso()
+        created_at: nowIso(),
       };
 
       const { data, error } = await supabase
@@ -475,19 +443,19 @@ export default function Copiloto() {
 
       if (error) {
         console.error("Erro insert participante", error);
-        // Reverter UI
-        setParticipantesLista(prev => prev.map(p => 
-          p.usuario_id === participante.usuario_id ? { ...p, presente: !novoStatus } : p
-        ));
+        setParticipantesLista((prev) =>
+          prev.map((p) =>
+            p.usuario_id === participante.usuario_id ? { ...p, presente: !novoStatus } : p
+          )
+        );
       } else {
-        // Atualiza ID real
-        setParticipantesLista(prev => prev.map(p => 
-          p.usuario_id === participante.usuario_id ? { ...data, is_temp: false } : p
-        ));
+        setParticipantesLista((prev) =>
+          prev.map((p) =>
+            p.usuario_id === participante.usuario_id ? { ...data, is_temp: false } : p
+          )
+        );
       }
-
     } else {
-      // UPDATE (manuais ou padrão já salvo)
       const { error } = await supabase
         .from("participantes_reuniao")
         .update({ presente: novoStatus })
@@ -495,10 +463,9 @@ export default function Copiloto() {
 
       if (error) {
         console.error("Erro update participante", error);
-        // Reverter UI
-        setParticipantesLista(prev => prev.map(p => 
-          p.id === participante.id ? { ...p, presente: !novoStatus } : p
-        ));
+        setParticipantesLista((prev) =>
+          prev.map((p) => (p.id === participante.id ? { ...p, presente: !novoStatus } : p))
+        );
       }
     }
   };
@@ -639,7 +606,10 @@ export default function Copiloto() {
 
     if (!data?.id) return alert("Senha inválida.");
 
-    const { error: e2 } = await supabase.from("reunioes").update({ status: "Pendente" }).eq("id", selecionada.id);
+    const { error: e2 } = await supabase
+      .from("reunioes")
+      .update({ status: "Pendente" })
+      .eq("id", selecionada.id);
 
     if (e2) {
       console.error("reabrir reuniao:", e2);
@@ -660,7 +630,10 @@ export default function Copiloto() {
     for (const file of files) {
       const fileName = `acao-${acaoId}-${Date.now()}-${sanitizeFileName(file.name)}`;
 
-      const { error } = await supabase.storage.from("evidencias").upload(fileName, file, { upsert: false });
+      const { error } = await supabase.storage
+        .from("evidencias")
+        .upload(fileName, file, { upsert: false });
+
       if (error) {
         console.error("Erro upload evidência:", error);
         continue;
@@ -692,7 +665,6 @@ export default function Copiloto() {
 
       const tipoId = r.tipo_reuniao_id;
 
-      // Backlog
       let pendTipo = [];
       if (tipoId) {
         const { data: pend, error: e2 } = await supabase
@@ -708,7 +680,6 @@ export default function Copiloto() {
         pendTipo = pend || [];
       }
 
-      // Concluídas desde última
       let concluidasDesde = [];
       if (tipoId && r.data_hora) {
         const { data: ultima, error: e3 } = await supabase
@@ -734,7 +705,6 @@ export default function Copiloto() {
             .limit(500);
 
           if (e4) throw e4;
-
           concluidasDesde = concl || [];
         } else {
           concluidasDesde = [];
@@ -770,9 +740,6 @@ export default function Copiloto() {
     if (!descricao) return alert("Informe o Nome da Ação (Descrição).");
     if (!responsavelId) return alert("Selecione o responsável.");
     if (!vencimento) return alert("Informe o vencimento.");
-    if ((novasEvidenciasAcao || []).length === 0) {
-      return alert("Anexe pelo menos uma evidência (foto/vídeo/documento).");
-    }
 
     setCreatingAcao(true);
 
@@ -835,22 +802,24 @@ export default function Copiloto() {
       const acaoId = inserted?.id;
       if (!acaoId) throw new Error("Erro: ação criada sem ID.");
 
-      const urls = await uploadEvidencias(acaoId, novasEvidenciasAcao);
+      if ((novasEvidenciasAcao || []).length > 0) {
+        const urls = await uploadEvidencias(acaoId, novasEvidenciasAcao);
 
-      if (!urls.length) {
-        alert("Atenção: A ação foi criada, mas falhou o upload da evidência. Edite a ação para tentar novamente.");
-      } else {
-        const payloadUpdate = {
-          fotos_acao: urls,
-          fotos: urls,
-          evidencia_url: urls[0] || null,
-        };
+        if (!urls.length) {
+          alert("A ação foi criada, mas não foi possível enviar as evidências.");
+        } else {
+          const payloadUpdate = {
+            fotos_acao: urls,
+            fotos: urls,
+            evidencia_url: urls[0] || null,
+          };
 
-        const { error: e2 } = await supabase.from("acoes").update(payloadUpdate).eq("id", acaoId);
+          const { error: e2 } = await supabase.from("acoes").update(payloadUpdate).eq("id", acaoId);
 
-        if (e2) {
-          console.error("salvarAcao update evidencias:", e2);
-          alert("Ação criada, mas houve erro ao vincular os arquivos: " + e2.message);
+          if (e2) {
+            console.error("salvarAcao update evidencias:", e2);
+            alert("Ação criada, mas houve erro ao vincular os arquivos: " + e2.message);
+          }
         }
       }
 
@@ -873,11 +842,10 @@ export default function Copiloto() {
 
   /* =========================
      Responsável autocomplete
-     ✅ Ajuste: não mostrar dropdown “debug/auto-complete” sem query
   ========================= */
   const responsaveisFiltrados = useMemo(() => {
     const q = String(responsavelQuery || "").trim().toLowerCase();
-    if (q.length < 2) return []; // ✅ só sugere com 2+ chars
+    if (q.length < 2) return [];
     return (listaResponsaveis || [])
       .filter((u) => {
         const nome = buildNomeSobrenome(u).toLowerCase();
@@ -960,12 +928,16 @@ export default function Copiloto() {
   };
 
   const listaAtiva =
-    acaoTab === "reuniao" ? acoesDaReuniao : acaoTab === "backlog" ? acoesPendentesTipo : acoesConcluidasDesdeUltima;
+    acaoTab === "reuniao"
+      ? acoesDaReuniao
+      : acaoTab === "backlog"
+      ? acoesPendentesTipo
+      : acoesConcluidasDesdeUltima;
 
   const materiaisReuniao = safeArray(selecionada?.materiais);
-  
+
   const reuniaoFinalizada =
-  String(selecionada?.status || "").trim().toUpperCase() === "REALIZADA";
+    String(selecionada?.status || "").trim().toUpperCase() === "REALIZADA";
 
   return (
     <Layout>
@@ -1032,7 +1004,6 @@ export default function Copiloto() {
                         {r.titulo || "Sem título"}
                       </div>
 
-                      {/* ✅ Ajuste: mostrar Data + Início + Término */}
                       <div className="text-[11px] text-slate-500 mt-1">
                         {meetingInicioFimLabel(r)}
                       </div>
@@ -1112,7 +1083,6 @@ export default function Copiloto() {
                   {selecionada?.titulo || "Selecione uma reunião à esquerda"}
                 </div>
 
-                {/* ✅ Ajuste: mostrar Data + Início + Término */}
                 <div className="mt-1 text-xs text-slate-500">
                   {selecionada?.id ? meetingInicioFimLabel(selecionada) : "-"}
                 </div>
@@ -1168,19 +1138,22 @@ export default function Copiloto() {
               </div>
             </div>
           </div>
+
           {/* Tabs principais */}
           <div className="flex flex-wrap gap-2 mb-4">
-            
-            {/* ✅ 1. NOVA TAB: LISTA DE PRESENÇA (PRIMEIRA) */}
-            <TabButton 
-              active={tab === "presenca"} 
-              onClick={() => setTab("presenca")} 
+            <TabButton
+              active={tab === "presenca"}
+              onClick={() => setTab("presenca")}
               icon={<UserCheck size={16} />}
             >
               Lista de Presença
             </TabButton>
 
-            <TabButton active={tab === "acoes"} onClick={() => setTab("acoes")} icon={<ClipboardList size={16} />}>
+            <TabButton
+              active={tab === "acoes"}
+              onClick={() => setTab("acoes")}
+              icon={<ClipboardList size={16} />}
+            >
               Ações
             </TabButton>
 
@@ -1200,7 +1173,6 @@ export default function Copiloto() {
               Pauta Manual
             </TabButton>
 
-            {/* ✅ NOVO: Material da Reunião (após Ata Manual) */}
             <TabButton
               active={tab === "materiais"}
               onClick={() => setTab("materiais")}
@@ -1216,108 +1188,127 @@ export default function Copiloto() {
               Selecione uma reunião na coluna da esquerda para visualizar ações e atas.
             </div>
           ) : tab === "presenca" ? (
-             <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500 text-center italic">               
-                {/* ✅ CHAMADA / ORGANIZADOR e PARTICIPANTES (Nova Seção) */}
-                {selecionada?.id && (
-                  <div className="mb-4 flex flex-col xl:flex-row gap-4">
-                    {/* Organizador */}
-                    <div className="w-full xl:w-1/3 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Crown size={16} className="text-amber-500" />
-                        <span className="text-xs font-black uppercase text-slate-500">Organizador (Responsável)</span>
-                      </div>
-                      {organizadorDetalhes ? (
-                        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm border border-blue-200 shrink-0 uppercase">
-                            {organizadorDetalhes.nome.charAt(0)}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-bold text-slate-800 truncate">
-                              {organizadorDetalhes.nome} {organizadorDetalhes.sobrenome}
-                            </div>
-                            <div className="text-xs text-slate-500 truncate flex items-center gap-1">
-                              <Mail size={10} /> {organizadorDetalhes.email}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                         <div className="text-xs text-slate-400 italic">Organizador não definido.</div>
-                      )}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500 text-center italic">
+              {selecionada?.id && (
+                <div className="mb-4 flex flex-col xl:flex-row gap-4">
+                  {/* Organizador */}
+                  <div className="w-full xl:w-1/3 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Crown size={16} className="text-amber-500" />
+                      <span className="text-xs font-black uppercase text-slate-500">
+                        Organizador (Responsável)
+                      </span>
                     </div>
-      
-                    {/* Participantes / Chamada */}
-                    <div className="w-full xl:w-2/3 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <UserCheck size={16} className="text-blue-600" />
-                          <span className="text-xs font-black uppercase text-slate-500">
-                            Participantes (Chamada)
-                          </span>
+                    {organizadorDetalhes ? (
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm border border-blue-200 shrink-0 uppercase">
+                          {organizadorDetalhes.nome.charAt(0)}
                         </div>
-                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-lg">
-                          {participantesLista.filter(p => p.presente).length} / {participantesLista.length} presentes
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-slate-800 truncate">
+                            {organizadorDetalhes.nome} {organizadorDetalhes.sobrenome}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate flex items-center gap-1">
+                            <Mail size={10} /> {organizadorDetalhes.email}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic">Organizador não definido.</div>
+                    )}
+                  </div>
+
+                  {/* Participantes / Chamada */}
+                  <div className="w-full xl:w-2/3 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <UserCheck size={16} className="text-blue-600" />
+                        <span className="text-xs font-black uppercase text-slate-500">
+                          Participantes (Chamada)
                         </span>
                       </div>
-      
-                      {loadingParticipantes ? (
-                        <div className="text-xs text-slate-400">Carregando chamada...</div>
-                      ) : participantesLista.length === 0 ? (
-                        <div className="text-xs text-slate-400 italic p-4 border border-dashed rounded-xl text-center">
-                          Nenhum participante vinculado.
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pr-1">
-                          {participantesLista.map((p) => (
-                            <button
-                              key={p.id || `manual-${p.nome}-${p.usuario_id || "x"}`}
-                              type="button"
-                              disabled={reuniaoFinalizada}
-                              title={reuniaoFinalizada ? "Reunião finalizada: presença bloqueada." : "Clique para marcar presença"}
-                              onClick={() => {
-                                if (reuniaoFinalizada) return;
-                                togglePresenca(p);
-                              }}
-                              className={[
-                                "flex items-center justify-between p-2 rounded-xl border transition-all group",
-                                p.presente ? "bg-green-50 border-green-200" : "bg-white border-slate-100 hover:bg-slate-50",
-                                reuniaoFinalizada ? "opacity-60 cursor-not-allowed" : ""
-                              ].join(" ")}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className={[
-                                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 border",
-                                    p.presente ? "bg-green-100 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200"
-                                  ].join(" ")}
-                                >
-                                  {p.nome ? p.nome.charAt(0) : "?"}
-                                </div>
-                            
-                                <div className="min-w-0 text-left">
-                                  <div className={`text-xs font-bold truncate ${p.presente ? "text-green-800" : "text-slate-700"}`}>
-                                    {p.nome || "Sem nome"}
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 truncate">{p.email || "-"}</div>
-                                </div>
-                              </div>
-                            
-                              <div className="shrink-0 ml-2">
-                                {reuniaoFinalizada ? (
-                                  <Lock size={16} className="text-slate-400" />
-                                ) : p.presente ? (
-                                  <CheckCircle2 size={18} className="text-green-500" />
-                                ) : (
-                                  <XCircle size={18} className="text-slate-200 group-hover:text-slate-300" />
-                                )}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-lg">
+                        {participantesLista.filter((p) => p.presente).length} /{" "}
+                        {participantesLista.length} presentes
+                      </span>
                     </div>
+
+                    {loadingParticipantes ? (
+                      <div className="text-xs text-slate-400">Carregando chamada...</div>
+                    ) : participantesLista.length === 0 ? (
+                      <div className="text-xs text-slate-400 italic p-4 border border-dashed rounded-xl text-center">
+                        Nenhum participante vinculado.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pr-1">
+                        {participantesLista.map((p) => (
+                          <button
+                            key={p.id || `manual-${p.nome}-${p.usuario_id || "x"}`}
+                            type="button"
+                            disabled={reuniaoFinalizada}
+                            title={
+                              reuniaoFinalizada
+                                ? "Reunião finalizada: presença bloqueada."
+                                : "Clique para marcar presença"
+                            }
+                            onClick={() => {
+                              if (reuniaoFinalizada) return;
+                              togglePresenca(p);
+                            }}
+                            className={[
+                              "flex items-center justify-between p-2 rounded-xl border transition-all group",
+                              p.presente
+                                ? "bg-green-50 border-green-200"
+                                : "bg-white border-slate-100 hover:bg-slate-50",
+                              reuniaoFinalizada ? "opacity-60 cursor-not-allowed" : "",
+                            ].join(" ")}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                className={[
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold uppercase shrink-0 border",
+                                  p.presente
+                                    ? "bg-green-100 text-green-700 border-green-200"
+                                    : "bg-slate-100 text-slate-500 border-slate-200",
+                                ].join(" ")}
+                              >
+                                {p.nome ? p.nome.charAt(0) : "?"}
+                              </div>
+
+                              <div className="min-w-0 text-left">
+                                <div
+                                  className={`text-xs font-bold truncate ${
+                                    p.presente ? "text-green-800" : "text-slate-700"
+                                  }`}
+                                >
+                                  {p.nome || "Sem nome"}
+                                </div>
+                                <div className="text-[10px] text-slate-400 truncate">
+                                  {p.email || "-"}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 ml-2">
+                              {reuniaoFinalizada ? (
+                                <Lock size={16} className="text-slate-400" />
+                              ) : p.presente ? (
+                                <CheckCircle2 size={18} className="text-green-500" />
+                              ) : (
+                                <XCircle
+                                  size={18}
+                                  className="text-slate-200 group-hover:text-slate-300"
+                                />
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-             </div>
+                </div>
+              )}
+            </div>
           ) : tab === "acoes" ? (
             <div className="space-y-4">
               {/* Subtabs ações */}
@@ -1331,7 +1322,10 @@ export default function Copiloto() {
                     Pendências do tipo ({(acoesPendentesTipo || []).length})
                   </Pill>
 
-                  <Pill active={acaoTab === "desde_ultima"} onClick={() => setAcaoTab("desde_ultima")}>
+                  <Pill
+                    active={acaoTab === "desde_ultima"}
+                    onClick={() => setAcaoTab("desde_ultima")}
+                  >
                     Concluídas desde a última ({(acoesConcluidasDesdeUltima || []).length})
                   </Pill>
                 </div>
@@ -1360,7 +1354,9 @@ export default function Copiloto() {
                       <AcaoCard key={a.id} acao={a} onClick={() => setAcaoSelecionada(a)} />
                     ))
                   ) : (
-                    <div className="text-sm text-slate-500">Nenhuma ação encontrada nesta aba.</div>
+                    <div className="text-sm text-slate-500">
+                      Nenhuma ação encontrada nesta aba.
+                    </div>
                   )}
                 </div>
               </div>
@@ -1425,7 +1421,6 @@ export default function Copiloto() {
                       disabled={loadingResponsaveis}
                     />
 
-                    {/* ✅ Ajuste: só mostra se tiver query >=2 */}
                     {respOpen && responsaveisFiltrados.length > 0 && (
                       <div className="absolute z-50 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
                         {responsaveisFiltrados.map((u) => (
@@ -1461,12 +1456,14 @@ export default function Copiloto() {
                   </div>
 
                   <div className="lg:col-span-2">
-                    <label className="text-xs font-extrabold text-slate-600">Evidências</label>
+                    <label className="text-xs font-extrabold text-slate-600">
+                      Evidências (opcional)
+                    </label>
 
                     <div className="mt-2 flex items-center gap-3">
                       <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-sm font-black transition-colors hover:border-blue-300">
                         <UploadCloud size={16} className="text-blue-600" />
-                        <span>Clique, arraste ou Cole (Ctrl+V)</span>
+                        <span>Clique, arraste ou Cole (Ctrl+V) se quiser anexar</span>
                         <input
                           type="file"
                           multiple
@@ -1483,7 +1480,11 @@ export default function Copiloto() {
                     {previews.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-3">
                         {previews.map((p) => (
-                          <MiniaturaArquivo key={p.id} preview={p} onRemove={() => removerEvidencia(p.id)} />
+                          <MiniaturaArquivo
+                            key={p.id}
+                            preview={p}
+                            onRemove={() => removerEvidencia(p.id)}
+                          />
                         ))}
                       </div>
                     )}
@@ -1497,14 +1498,23 @@ export default function Copiloto() {
                     disabled={creatingAcao}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {creatingAcao ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {creatingAcao ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Save size={16} />
+                    )}
                     {creatingAcao ? "Salvando..." : "Salvar ação"}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      setNovaAcao({ descricao: "", observacao: "", responsavelId: "", vencimento: "" });
+                      setNovaAcao({
+                        descricao: "",
+                        observacao: "",
+                        responsavelId: "",
+                        vencimento: "",
+                      });
                       setResponsavelQuery("");
                       setNovasEvidenciasAcao([]);
                       setRespOpen(false);
@@ -1587,7 +1597,6 @@ export default function Copiloto() {
               )}
             </div>
           ) : (
-            // ✅ NOVO: Material da Reunião
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Paperclip size={18} className="text-slate-600" />
@@ -1598,7 +1607,9 @@ export default function Copiloto() {
               </div>
 
               {materiaisReuniao.length === 0 ? (
-                <div className="text-sm text-slate-500">Nenhum material anexado nesta reunião.</div>
+                <div className="text-sm text-slate-500">
+                  Nenhum material anexado nesta reunião.
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {materiaisReuniao.map((m, idx) => (
@@ -1607,7 +1618,10 @@ export default function Copiloto() {
                       className="flex items-center justify-between border border-slate-200 rounded-xl p-3 bg-slate-50"
                     >
                       <div className="min-w-0">
-                        <div className="text-sm font-black text-slate-800 truncate" title={m?.name || "Arquivo"}>
+                        <div
+                          className="text-sm font-black text-slate-800 truncate"
+                          title={m?.name || "Arquivo"}
+                        >
                           {m?.name || "Arquivo"}
                         </div>
                         <div className="text-[11px] text-slate-500 truncate" title={m?.type || ""}>
@@ -1830,7 +1844,11 @@ function AcaoCard({ acao, onClick }) {
         </div>
 
         <div className="flex-1">
-          <div className={`text-sm font-semibold ${done || excluded ? "line-through text-slate-400" : "text-slate-900"}`}>
+          <div
+            className={`text-sm font-semibold ${
+              done || excluded ? "line-through text-slate-400" : "text-slate-900"
+            }`}
+          >
             {acao?.descricao || "-"}
             {excluded && (
               <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase font-black no-underline inline-block border border-red-200">
@@ -1846,8 +1864,7 @@ function AcaoCard({ acao, onClick }) {
 
             {acao?.data_vencimento ? (
               <span className="text-slate-500 flex items-center gap-1">
-                <Clock size={10} /> Venc.:{" "}
-                {new Date(acao.data_vencimento).toLocaleDateString("pt-BR")}
+                <Clock size={10} /> Venc.: {new Date(acao.data_vencimento).toLocaleDateString("pt-BR")}
               </span>
             ) : null}
 
