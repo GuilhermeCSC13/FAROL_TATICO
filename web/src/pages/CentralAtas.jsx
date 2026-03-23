@@ -1226,6 +1226,12 @@ Estrutura obrigatória:
                       {generatingPdf ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
                     </button>
 
+                    {isEditing && (
+                      <button onClick={handleSaveAta} className="p-2 bg-green-600 text-white rounded hover:bg-green-700" title="Salvar">
+                        <CheckCircle size={18} />
+                      </button>
+                    )}
+
                     <button onClick={() => setIsEditing(!isEditing)} className="p-2 bg-slate-100 rounded hover:bg-slate-200" title="Editar">
                       <Edit3 size={18} />
                     </button>
