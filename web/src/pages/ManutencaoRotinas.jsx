@@ -4,12 +4,15 @@ import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
+// IDs fixos das áreas
+const ID_GESTAO_FROTA = 2;
+const ID_PCM = 9;
+
 const AREAS_MANUTENCAO = [
-  { id: 2, nome: "Frota" },
-  { id: 9, nome: "PCM" },
+  { id: ID_GESTAO_FROTA, nome: "Gestão de Frota" },
+  { id: ID_PCM, nome: "PCM" },
 ];
 
-// ✅ UNID (somente leitura na tela Rotinas, igual padrão)
 const UNIDADES = [
   { value: "kml", label: "km/l" },
   { value: "currency", label: "R$" },
@@ -87,7 +90,7 @@ function parseNumberPtBr(raw) {
 
 const ManutencaoRotinas = () => {
   const [areas, setAreas] = useState(AREAS_MANUTENCAO);
-  const [areaSelecionada, setAreaSelecionada] = useState(2);
+  const [areaSelecionada, setAreaSelecionada] = useState(ID_GESTAO_FROTA);
   const [rotinas, setRotinas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
@@ -98,7 +101,6 @@ const ManutencaoRotinas = () => {
 
   useEffect(() => {
     fetchAreas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -112,17 +114,23 @@ const ManutencaoRotinas = () => {
         .from("areas")
         .select("*")
         .eq("ativa", true)
-        .in("id", [2, 9])
+        .in("id", [ID_GESTAO_FROTA, ID_PCM])
         .order("id");
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const ordenadas = [...data].sort((a, b) => a.id - b.id);
-        setAreas(ordenadas);
+        const lista = [...data]
+          .map((a) => ({
+            ...a,
+            nome: a.id === ID_GESTAO_FROTA ? "Gestão de Frota" : a.id === ID_PCM ? "PCM" : a.nome,
+          }))
+          .sort((a, b) => a.id - b.id);
 
-        if (!ordenadas.some((a) => a.id === areaSelecionada)) {
-          setAreaSelecionada(ordenadas[0].id);
+        setAreas(lista);
+
+        if (!lista.some((a) => a.id === areaSelecionada)) {
+          setAreaSelecionada(lista[0].id);
         }
       }
     } catch (e) {
@@ -135,11 +143,7 @@ const ManutencaoRotinas = () => {
 
   const isBinaryRotina = (row) => {
     const unidade = String(row?.unidade ?? "").trim().toLowerCase();
-    return (
-      unidade === "binario" ||
-      unidade === "binário" ||
-      unidade === "boolean"
-    );
+    return unidade === "binario" || unidade === "binário" || unidade === "boolean";
   };
 
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
@@ -255,11 +259,7 @@ const ManutencaoRotinas = () => {
           );
 
           let real = "";
-          if (
-            valObj &&
-            valObj.valor_realizado !== null &&
-            valObj.valor_realizado !== ""
-          ) {
+          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
             const parsed = parseNumberPtBr(valObj.valor_realizado);
             real = parsed === null ? "" : parsed;
           }
@@ -276,11 +276,7 @@ const ManutencaoRotinas = () => {
           }
 
           let alvo = null;
-          if (
-            valObj &&
-            valObj.valor_meta !== null &&
-            valObj.valor_meta !== ""
-          ) {
+          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
             const parsed = parseNumberPtBr(valObj.valor_meta);
             alvo = parsed === null ? null : parsed;
           }
@@ -304,8 +300,8 @@ const ManutencaoRotinas = () => {
       });
 
       setRotinas(combined);
-    } catch (e) {
-      console.error("Erro ao carregar rotinas:", e);
+    } catch (error) {
+      console.error("Erro ao carregar rotinas:", error);
     } finally {
       setLoading(false);
     }
@@ -418,14 +414,11 @@ const ManutencaoRotinas = () => {
       const mime = format === "jpg" ? "image/jpeg" : "image/png";
       const ext = format === "jpg" ? "jpg" : "png";
 
-      const dataUrl = canvas.toDataURL(
-        mime,
-        format === "jpg" ? 0.92 : undefined
-      );
+      const dataUrl = canvas.toDataURL(mime, format === "jpg" ? 0.92 : undefined);
       const a = document.createElement("a");
 
       const areaName =
-        areas.find((a) => a.id === areaSelecionada)?.nome || "Manutencao";
+        areas.find((a) => a.id === areaSelecionada)?.nome || "Gestao_de_Frota";
 
       a.href = dataUrl;
       a.download = `FarolRotinas_${areaName}_2026.${ext}`;
@@ -435,15 +428,12 @@ const ManutencaoRotinas = () => {
     }
   };
 
-  const areaNomeAtual =
-    areas.find((a) => a.id === areaSelecionada)?.nome || "Manutenção";
-
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-800">
-            Farol de Rotinas — Manutenção
+            Farol de Rotinas — Gestão de Frota
           </h2>
 
           <div className="relative">
@@ -476,9 +466,7 @@ const ManutencaoRotinas = () => {
           </div>
 
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-gray-500 font-semibold">
-              Responsável:
-            </span>
+            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
             <select
               value={responsavelFiltro}
               onChange={(e) => setResponsavelFiltro(e.target.value)}
@@ -492,16 +480,28 @@ const ManutencaoRotinas = () => {
               ))}
             </select>
           </div>
+        </div>
 
-          <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 mr-2">
+            <button
+              onClick={() => setShowConfig(true)}
+              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
+              title="Configurações"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
+
+          <div className="flex space-x-2">
             {areas.map((area) => (
               <button
                 key={area.id}
                 onClick={() => setAreaSelecionada(area.id)}
-                className={`px-3 py-1.5 text-xs font-bold uppercase transition-colors ${
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
                   areaSelecionada === area.id
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-50"
+                    ? "border-blue-600 text-blue-700 bg-blue-50"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                 }`}
               >
                 {area.nome}
@@ -509,169 +509,153 @@ const ManutencaoRotinas = () => {
             ))}
           </div>
         </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowConfig(true)}
-            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
-            title="Configurações"
-          >
-            <Settings size={18} />
-          </button>
-        </div>
-      </div>
-
-      <div className="px-6 py-2 border-b bg-white">
-        <p className="text-sm text-gray-500">
-          Exibindo indicadores de:{" "}
-          <span className="font-semibold text-gray-700">{areaNomeAtual}</span>
-        </p>
       </div>
 
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="text-center py-10 text-gray-500 animate-pulse">
-            Carregando dados...
-          </div>
+          <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados.</div>
         ) : (
-          <div
-            ref={tableWrapRef}
-            className="border border-gray-300 rounded-xl overflow-hidden shadow-sm"
-          >
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#d0e0e3] font-bold text-center">
-                  <th className="p-2 sticky left-0 bg-[#d0e0e3] z-20 border border-gray-300 min-w-[260px] text-left">
-                    Indicador
-                  </th>
-                  <th className="p-2 border border-gray-300 min-w-[100px]">UNID</th>
-                  <th className="p-2 border border-gray-300 min-w-[140px]">Responsável</th>
-                  <th className="p-2 border border-gray-300 min-w-[80px]">Peso</th>
-                  <th className="p-2 border border-gray-300 min-w-[120px]">Tipo</th>
-
-                  {MESES.map((mes) => (
-                    <th key={mes.id} className="p-2 border border-gray-300 min-w-[95px] uppercase">
-                      {mes.label}
+          <div className="border border-gray-300 rounded-xl shadow-sm overflow-x-auto overflow-y-hidden">
+            <div ref={tableWrapRef} className="min-w-max">
+              <table className="table-fixed text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-[#d0e0e3] text-gray-800 text-center font-bold">
+                    <th className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-[#d0e0e3] z-20 text-left">
+                      Indicador
                     </th>
-                  ))}
-                </tr>
-              </thead>
 
-              <tbody>
-                {rotinasFiltradas.map((row) => (
-                  <tr key={row.id} className="even:bg-gray-50">
-                    <td className="p-2 sticky left-0 bg-inherit z-10 border border-gray-300 font-semibold text-gray-700">
-                      {row.nome_indicador || row.indicador || row.nome}
-                    </td>
+                    <th className="px-2 py-1 border border-gray-300 w-[64px]">UNID.</th>
+                    <th className="px-2 py-1 border border-gray-300 w-[120px] text-left">
+                      Responsável
+                    </th>
+                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Peso</th>
+                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Tipo</th>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {getUnidadeLabel(row.unidade)}
-                    </td>
+                    {MESES.map((mes) => (
+                      <th
+                        key={mes.id}
+                        className="px-2 py-1 border border-gray-300 w-[78px] whitespace-nowrap"
+                      >
+                        {mes.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {row.responsavel || "-"}
-                    </td>
+                <tbody>
+                  {rotinasFiltradas.map((row, idx) => (
+                    <tr key={row.id || idx} className="hover:bg-gray-50 text-center">
+                      <td className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-white z-10 text-left font-semibold text-gray-800">
+                        {row.nome_indicador || row.indicador || row.nome}
+                      </td>
 
-                    <td className="p-2 border border-gray-300 text-center font-semibold">
-                      {parseNumberPtBr(row.peso) ?? 0}
-                    </td>
+                      <td className="px-2 py-1 border border-gray-300 w-[64px]">
+                        {getUnidadeLabel(row.unidade) || "-"}
+                      </td>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {row.tipo_comparacao}
-                    </td>
+                      <td className="px-2 py-1 border border-gray-300 w-[120px] text-left">
+                        {row.responsavel || "-"}
+                      </td>
 
-                    {MESES.map((mes) => {
-                      const dados = row.meses[mes.id] || {};
+                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
+                        {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
+                      </td>
 
-                      if (row._isBinary) {
+                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
+                        {row.tipo_comparacao}
+                      </td>
+
+                      {MESES.map((mes) => {
+                        const dados = row.meses[mes.id] || {};
+
+                        if (row._isBinary) {
+                          return (
+                            <td
+                              key={mes.id}
+                              className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
+                                dados?.color || "bg-white"
+                              }`}
+                            >
+                              <div className="flex flex-col h-full justify-between">
+                                <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                  {numToBoolLabel(dados.alvo)}
+                                </div>
+
+                                <select
+                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                  value={numToBoolLabel(dados.realizado)}
+                                  onChange={(e) =>
+                                    handleSave(row.id, mes.id, e.target.value, row)
+                                  }
+                                >
+                                  <option value="">-</option>
+                                  <option value="Sim">Sim</option>
+                                  <option value="Não">Não</option>
+                                </select>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        const valorRealizado =
+                          dados?.realizado === null ||
+                          dados?.realizado === "" ||
+                          Number.isNaN(dados?.realizado)
+                            ? ""
+                            : dados.realizado;
+
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-1 relative h-12 align-middle ${dados.color || "bg-white"}`}
+                            className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
+                              dados?.color || "bg-white"
+                            }`}
                           >
                             <div className="flex flex-col h-full justify-between">
-                              <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
-                                {numToBoolLabel(dados.alvo)}
+                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                {dados?.alvo !== null && dados?.alvo !== undefined
+                                  ? Number(dados.alvo).toFixed(2)
+                                  : ""}
                               </div>
 
-                              <select
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
-                                value={numToBoolLabel(dados.realizado)}
-                                onChange={(e) =>
-                                  handleSave(row.id, mes.id, e.target.value, row)
-                                }
-                              >
-                                <option value="">-</option>
-                                <option value="Sim">Sim</option>
-                                <option value="Não">Não</option>
-                              </select>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                placeholder="-"
+                                defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
+                                onBlur={(e) => handleSave(row.id, mes.id, e.target.value, row)}
+                              />
                             </div>
                           </td>
                         );
-                      }
-
-                      const valorRealizado =
-                        dados?.realizado === null ||
-                        dados?.realizado === "" ||
-                        Number.isNaN(dados?.realizado)
-                          ? ""
-                          : dados.realizado;
-
-                      return (
-                        <td
-                          key={mes.id}
-                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color || "bg-white"}`}
-                        >
-                          <div className="flex flex-col h-full justify-between">
-                            <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
-                              {dados.alvo !== null && dados.alvo !== undefined
-                                ? Number(dados.alvo).toFixed(2)
-                                : ""}
-                            </div>
-
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                              placeholder="-"
-                              defaultValue={
-                                valorRealizado === ""
-                                  ? ""
-                                  : String(valorRealizado)
-                              }
-                              onBlur={(e) =>
-                                handleSave(row.id, mes.id, e.target.value, row)
-                              }
-                            />
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-
-                <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
-                  <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
-                    TOTAL SCORE
-                  </td>
-
-                  <td className="px-2 py-1 border-r border-red-500"></td>
-                  <td className="px-2 py-1 border-r border-red-500"></td>
-
-                  <td className="px-2 py-1 border-r border-red-500 text-center">
-                    {Number(totalPeso || 0).toFixed(0)}
-                  </td>
-
-                  <td className="px-2 py-1 border-r border-red-500"></td>
-
-                  {MESES.map((mes) => (
-                    <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
-                      {getTotalScore(mes.id)}
-                    </td>
+                      })}
+                    </tr>
                   ))}
-                </tr>
-              </tbody>
-            </table>
+
+                  <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
+                    <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
+                      TOTAL SCORE
+                    </td>
+
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+
+                    <td className="px-2 py-1 border-r border-red-500 text-center">
+                      {Number(totalPeso || 0).toFixed(0)}
+                    </td>
+
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+
+                    {MESES.map((mes) => (
+                      <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
+                        {getTotalScore(mes.id)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
