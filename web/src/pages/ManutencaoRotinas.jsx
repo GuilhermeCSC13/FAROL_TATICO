@@ -5,7 +5,7 @@ import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
 const AREAS_MANUTENCAO = [
-  { id: 2, nome: "Manutenção" },
+  { id: 2, nome: "Frota" },
   { id: 9, nome: "PCM" },
 ];
 
