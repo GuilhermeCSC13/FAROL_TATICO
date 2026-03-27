@@ -502,129 +502,72 @@ const MoovRotinas = () => {
       </div>
 
       {/* Tabela */}
+
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados...</div>
+          <div className="text-center py-10 text-gray-500 animate-pulse">
+            Carregando dados...
+          </div>
         ) : (
-          <div className="border border-gray-300 rounded-xl shadow-sm overflow-x-auto overflow-y-hidden">
-            <div ref={tableWrapRef} className="min-w-max">
-              <table className="table-fixed text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-[#d0e0e3] text-gray-800 text-center font-bold">
-                    <th className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-[#d0e0e3] z-20 text-left">
-                      Indicador
+          <div
+            ref={tableWrapRef}
+            className="border rounded-xl overflow-hidden shadow-sm w-full"
+          >
+            <table className="w-full table-fixed text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-[#d0e0e3] text-center font-bold">
+                  <th className="p-1 w-[16%] sticky left-0 bg-[#d0e0e3] z-10 text-left border border-gray-300">
+                    Indicador
+                  </th>
+                  <th className="p-1 w-[6%] border border-gray-300">UNID.</th>
+                  <th className="p-1 w-[9%] border border-gray-300">Responsável</th>
+                  <th className="p-1 w-[4%] border border-gray-300">Peso</th>
+                  <th className="p-1 w-[4%] border border-gray-300">Tipo</th>
+
+                  {MESES.map((m) => (
+                    <th
+                      key={m.id}
+                      className="p-1 border border-gray-300 text-[10px]"
+                      style={{ width: "4.8%" }
+                    >
+                      {m.label}
                     </th>
+                  ))}
+                </tr>
+              </thead>
 
-                    <th className="px-2 py-1 border border-gray-300 w-[64px]">UNID.</th>
+              <tbody>
+                {rotinasFiltradas.map((row) => (
+                  <tr key={row.id} className="hover:bg-gray-50 text-center">
+                    <td className="p-1 text-left font-semibold sticky left-0 bg-white z-10 border border-gray-300 leading-tight break-words">
+                      {row.indicador}
+                    </td>
 
-                    <th className="px-2 py-1 border border-gray-300 w-[120px] text-left">
-                      Responsável
-                    </th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Peso</th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Tipo</th>
+                    <td className="p-1 border border-gray-300 align-top">
+                      <div className="text-[10px] font-semibold text-gray-700">
+                        {getUnidadeLabel(row.unidade) || "-"}
+                      </div>
+                      <div className="text-[9px] text-gray-400 font-normal mt-0.5 leading-tight">
+                        {String(row.unidade || "").trim().toLowerCase()}
+                      </div>
+                    </td>
 
-                    {MESES.map((mes) => (
-                      <th
-                        key={mes.id}
-                        className="px-2 py-1 border border-gray-300 w-[78px] whitespace-nowrap"
-                      >
-                        {mes.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+                    <td className="p-1 text-left text-[10px] border border-gray-300 leading-tight break-words">
+                      {row.responsavel || "-"}
+                    </td>
 
-                <tbody>
-                  {rotinasFiltradas.map((row, idx) => (
-                    <tr key={row.id || idx} className="hover:bg-gray-50 text-center">
-                      <td className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-white z-10 text-left font-semibold text-gray-800">
-                        {row.indicador}
-                      </td>
+                    <td className="p-1 bg-gray-50 border border-gray-300 text-center">
+                      {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[64px]">
-                        <div className="text-[10px] font-semibold text-gray-700 leading-3">
-                          {getUnidadeLabel(row.unidade) || "-"}
-                        </div>
-                        <div className="text-[9px] text-gray-400 font-normal text-left mt-0.5 leading-3">
-                          {String(row.unidade || "").trim().toLowerCase()}
-                        </div>
-                      </td>
+                    <td className="p-1 font-mono text-gray-500 border border-gray-300 text-center text-[10px]">
+                      {row.tipo_comparacao}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[120px] text-[10px] text-gray-700 text-left">
-                        {row.responsavel || "-"}
-                      </td>
+                    {MESES.map((mes) => {
+                      const dados = row.meses[mes.id] || {};
 
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
-                        {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
-                      </td>
-
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] font-mono text-gray-500">
-                        {row.tipo_comparacao}
-                      </td>
-
-                      {MESES.map((mes) => {
-                        const dados = row.meses[mes.id];
-
-                        // ✅ MÉDIA 25 (mes=14) — só realizado, sem score
-                        if (mes.id === 14) {
-                          const valorRealizado =
-                            dados?.realizado === null ||
-                            dados?.realizado === "" ||
-                            Number.isNaN(dados?.realizado)
-                              ? ""
-                              : dados.realizado;
-
-                          return (
-                            <td
-                              key={mes.id}
-                              className="border border-gray-300 p-0 relative h-10 align-middle bg-white w-[78px]"
-                            >
-                              <div className="flex flex-col h-full justify-center">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                  placeholder="-"
-                                  defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
-                                  onBlur={(e) => handleSave(row.id, 14, e.target.value, row)}
-                                />
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        // ✅ Binário
-                        if (row._isBinary) {
-                          const alvoLabel = numToBoolLabel(dados?.alvo ?? 1);
-                          const realLabel = numToBoolLabel(dados?.realizado);
-
-                          return (
-                            <td
-                              key={mes.id}
-                              className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                                dados?.color || "bg-white"
-                              }`}
-                            >
-                              <div className="flex flex-col h-full justify-between">
-                                <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                  {alvoLabel || "Sim"}
-                                </div>
-
-                                <select
-                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                  value={realLabel || ""}
-                                  onChange={(e) => handleSave(row.id, mes.id, e.target.value, row)}
-                                >
-                                  <option value="">-</option>
-                                  <option value="Sim">Sim</option>
-                                  <option value="Não">Não</option>
-                                </select>
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        // ✅ Numérico
+                      if (mes.id === 14) {
                         const valorRealizado =
                           dados?.realizado === null ||
                           dados?.realizado === "" ||
@@ -635,59 +578,115 @@ const MoovRotinas = () => {
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                              dados?.color || "bg-white"
-                            }`}
+                            className="border border-gray-300 p-0 h-10 align-middle bg-white"
                           >
-                            <div className="flex flex-col h-full justify-between">
-                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                {dados?.alvo !== null && dados?.alvo !== undefined
-                                  ? Number(dados.alvo).toFixed(2)
-                                  : ""}
-                              </div>
-
+                            <div className="flex flex-col h-full justify-center">
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                className="w-full text-center bg-transparent font-bold text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
                                 placeholder="-"
                                 defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
-                                onBlur={(e) => handleSave(row.id, mes.id, e.target.value, row)}
+                                onBlur={(e) => handleSave(row.id, 14, e.target.value, row)}
                               />
                             </div>
                           </td>
                         );
-                      })}
-                    </tr>
-                  ))}
+                      }
 
-                  {/* TOTAL SCORE */}
-                  <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
-                    <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
-                      TOTAL SCORE
-                    </td>
+                      if (row._isBinary) {
+                        const alvoLabel = numToBoolLabel(dados.alvo ?? 1);
+                        const realLabel = numToBoolLabel(dados.realizado);
 
-                    <td className="px-2 py-1 border-r border-red-500"></td>
-                    <td className="px-2 py-1 border-r border-red-500"></td>
+                        return (
+                          <td
+                            key={mes.id}
+                            className={`border border-gray-300 p-0 h-10 align-middle ${
+                              dados.color || "bg-white"
+                            }`}
+                          >
+                            <div className="flex flex-col h-full justify-between">
+                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                {alvoLabel || "Sim"}
+                              </div>
 
-                    <td className="px-2 py-1 border-r border-red-500 text-center">
-                      {Number(totalPeso || 0).toFixed(0)}
-                    </td>
+                              <select
+                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
+                                value={realLabel || ""}
+                                onChange={(e) =>
+                                  handleSave(row.id, mes.id, e.target.value, row)
+                                }
+                              >
+                                <option value="">-</option>
+                                <option value="Sim">Sim</option>
+                                <option value="Não">Não</option>
+                              </select>
+                            </div>
+                          </td>
+                        );
+                      }
 
-                    <td className="px-2 py-1 border-r border-red-500"></td>
+                      const valorRealizado =
+                        dados?.realizado === "" ||
+                        dados?.realizado === null ||
+                        Number.isNaN(dados?.realizado)
+                          ? ""
+                          : dados.realizado;
 
-                    {MESES.map((mes) => (
-                      <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
-                        {getTotalScore(mes.id)}
-                      </td>
-                    ))}
+                      return (
+                        <td
+                          key={mes.id}
+                          className={`border border-gray-300 p-0 h-10 align-middle ${
+                            dados.color || "bg-white"
+                          }`}
+                        >
+                          <div className="flex flex-col h-full justify-between">
+                            <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                              {dados.alvo !== null && dados.alvo !== undefined
+                                ? Number(dados.alvo).toFixed(2)
+                                : ""}
+                            </div>
+
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="w-full text-center bg-transparent font-bold text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
+                              placeholder="-"
+                              defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
+                              onBlur={(e) =>
+                                handleSave(row.id, mes.id, e.target.value, row)
+                              }
+                            />
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
-                </tbody>
-              </table>
-            </div>
+                ))}
+
+                <tr className="bg-red-600 text-white font-bold border-t-2">
+                  <td className="p-2 sticky left-0 bg-red-600 z-10 text-right pr-4 border border-red-500">
+                    TOTAL SCORE
+                  </td>
+                  <td className="p-2 border border-red-500"></td>
+                  <td className="p-2 border border-red-500"></td>
+                  <td className="p-2 text-center border border-red-500">
+                    {Number(totalPeso || 0).toFixed(0)}
+                  </td>
+                  <td className="p-2 border border-red-500"></td>
+
+                  {MESES.map((m) => (
+                    <td key={m.id} className="p-2 text-center border border-red-500">
+                      {m.id === 14 ? "-" : getTotalScore(m.id)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
 
       {showConfig && (
         <ConfiguracaoGeral
