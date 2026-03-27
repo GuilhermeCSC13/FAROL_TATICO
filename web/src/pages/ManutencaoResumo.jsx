@@ -19,9 +19,12 @@ import {
 } from "lucide-react";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 
+const ID_GESTAO_FROTA = 2;
+const ID_PCM = 9;
+
 const AREAS_MANUTENCAO = [
-  { id: 2, nome: "Manutenção" },
-  { id: 9, nome: "PCM" },
+  { id: ID_GESTAO_FROTA, nome: "Gestão de Frota" },
+  { id: ID_PCM, nome: "PCM" },
 ];
 
 const MESES = [
@@ -67,7 +70,7 @@ const ManutencaoResumo = () => {
   const [showConfig, setShowConfig] = useState(false);
 
   const [mesSelecionado, setMesSelecionado] = useState(1);
-  const [areaFiltro, setAreaFiltro] = useState("ALL"); // ALL | 2 | 9
+  const [areaFiltro, setAreaFiltro] = useState("ALL");
 
   const [metrics, setMetrics] = useState({
     scoreAtual: 0,
@@ -145,7 +148,7 @@ const ManutencaoResumo = () => {
       let queryMetas = supabase.from("metas_farol").select("*");
 
       if (areaFiltro === "ALL") {
-        queryMetas = queryMetas.in("area_id", [2, 9]);
+        queryMetas = queryMetas.in("area_id", [ID_GESTAO_FROTA, ID_PCM]);
       } else {
         queryMetas = queryMetas.eq("area_id", Number(areaFiltro));
       }
@@ -232,7 +235,6 @@ const ManutencaoResumo = () => {
           const alvo = alvos.find(
             (a) => a.meta_id === meta.id && a.mes === mesId
           )?.valor_meta;
-
           const real = realizados.find(
             (r) => r.meta_id === meta.id && r.mes === mesId
           )?.valor_realizado;
@@ -266,7 +268,7 @@ const ManutencaoResumo = () => {
       setChartData(historico);
       setAlertas(listaAlertas);
     } catch (error) {
-      console.error("Erro Dashboard Manutenção:", error);
+      console.error("Erro Dashboard Gestão de Frota:", error);
     } finally {
       setLoading(false);
     }
@@ -277,17 +279,17 @@ const ManutencaoResumo = () => {
 
   const areaLabel =
     areaFiltro === "ALL"
-      ? "PCM + Manutenção"
-      : areaFiltro === "9"
+      ? "PCM + Gestão de Frota"
+      : areaFiltro === String(ID_PCM)
       ? "PCM"
-      : "Manutenção";
+      : "Gestão de Frota";
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">
-            Visão Geral — Manutenção
+            Visão Geral — Gestão de Frota
           </h2>
           <p className="text-sm text-gray-500">
             Acompanhamento consolidado de performance —{" "}
@@ -302,9 +304,9 @@ const ManutencaoResumo = () => {
             onChange={(e) => setAreaFiltro(e.target.value)}
             className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
           >
-            <option value="ALL">Manutenção (PCM + Manutenção)</option>
-            <option value="9">PCM</option>
-            <option value="2">Manutenção</option>
+            <option value="ALL">Gestão de Frota (PCM + Gestão de Frota)</option>
+            <option value={String(ID_PCM)}>PCM</option>
+            <option value={String(ID_GESTAO_FROTA)}>Gestão de Frota</option>
           </select>
 
           <select
