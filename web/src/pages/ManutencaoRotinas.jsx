@@ -4,7 +4,6 @@ import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
-// IDs fixos das áreas
 const ID_GESTAO_FROTA = 2;
 const ID_PCM = 9;
 
@@ -20,12 +19,6 @@ const UNIDADES = [
   { value: "numero", label: "Número (123)" },
   { value: "binario", label: "Binário (Sim/Não)" },
 ];
-
-function getUnidadeLabel(v) {
-  const key = String(v ?? "").trim().toLowerCase();
-  const opt = UNIDADES.find((u) => u.value === key);
-  return opt?.label || (v ? String(v) : "");
-}
 
 const MESES = [
   { id: 1, label: "jan/26" },
@@ -43,6 +36,12 @@ const MESES = [
   { id: 13, label: "acum/26" },
   { id: 14, label: "média 25" },
 ];
+
+function getUnidadeLabel(v) {
+  const key = String(v ?? "").trim().toLowerCase();
+  const opt = UNIDADES.find((u) => u.value === key);
+  return opt?.label || (v ? String(v) : "");
+}
 
 function normBoolLabel(v) {
   const s = String(v ?? "").trim().toLowerCase();
@@ -94,7 +93,6 @@ const ManutencaoRotinas = () => {
   const [rotinas, setRotinas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
-
   const [responsavelFiltro, setResponsavelFiltro] = useState("");
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
@@ -120,13 +118,15 @@ const ManutencaoRotinas = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const lista = [...data]
-          .map((a) => ({
-            ...a,
-            nome: a.id === ID_GESTAO_FROTA ? "Gestão de Frota" : a.id === ID_PCM ? "PCM" : a.nome,
-          }))
-          .sort((a, b) => a.id - b.id);
-
+        const lista = [...data].map((a) => ({
+          ...a,
+          nome:
+            a.id === ID_GESTAO_FROTA
+              ? "Gestão de Frota"
+              : a.id === ID_PCM
+              ? "PCM"
+              : a.nome,
+        }));
         setAreas(lista);
 
         if (!lista.some((a) => a.id === areaSelecionada)) {
@@ -143,7 +143,11 @@ const ManutencaoRotinas = () => {
 
   const isBinaryRotina = (row) => {
     const unidade = String(row?.unidade ?? "").trim().toLowerCase();
-    return unidade === "binario" || unidade === "binário" || unidade === "boolean";
+    return (
+      unidade === "binario" ||
+      unidade === "binário" ||
+      unidade === "boolean"
+    );
   };
 
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
@@ -188,17 +192,11 @@ const ManutencaoRotinas = () => {
         if (r === 0) {
           multiplicador = 1.0;
           cor = "bg-green-300";
-        } else {
-          multiplicador = 0.0;
-          cor = "bg-red-200";
         }
       } else {
         if (r >= 0) {
           multiplicador = 1.0;
           cor = "bg-green-300";
-        } else {
-          multiplicador = 0.0;
-          cor = "bg-red-200";
         }
       }
 
@@ -224,9 +222,6 @@ const ManutencaoRotinas = () => {
     } else if (atingimento >= 0.97) {
       multiplicador = 0.25;
       cor = "bg-orange-100";
-    } else {
-      multiplicador = 0.0;
-      cor = "bg-red-200";
     }
 
     return { score: peso * multiplicador, multiplicador, color: cor };
@@ -259,7 +254,11 @@ const ManutencaoRotinas = () => {
           );
 
           let real = "";
-          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
+          if (
+            valObj &&
+            valObj.valor_realizado !== null &&
+            valObj.valor_realizado !== ""
+          ) {
             const parsed = parseNumberPtBr(valObj.valor_realizado);
             real = parsed === null ? "" : parsed;
           }
@@ -276,7 +275,11 @@ const ManutencaoRotinas = () => {
           }
 
           let alvo = null;
-          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
+          if (
+            valObj &&
+            valObj.valor_meta !== null &&
+            valObj.valor_meta !== ""
+          ) {
             const parsed = parseNumberPtBr(valObj.valor_meta);
             alvo = parsed === null ? null : parsed;
           }
@@ -300,8 +303,8 @@ const ManutencaoRotinas = () => {
       });
 
       setRotinas(combined);
-    } catch (error) {
-      console.error("Erro ao carregar rotinas:", error);
+    } catch (e) {
+      console.error("Erro ao carregar rotinas:", e);
     } finally {
       setLoading(false);
     }
@@ -309,8 +312,8 @@ const ManutencaoRotinas = () => {
 
   const handleSave = async (rotinaId, mesId, valor, rotinaRow) => {
     const isBinary = !!rotinaRow?._isBinary;
-
     let valorNum = null;
+
     if (isBinary) valorNum = boolToNum(valor);
     else valorNum = parseNumberPtBr(valor);
 
@@ -349,16 +352,15 @@ const ManutencaoRotinas = () => {
     );
 
     try {
-      const payload = {
-        rotina_id: rotinaId,
-        ano: 2026,
-        mes: mesId,
-        valor_realizado: valorNum,
-      };
-
-      const { error } = await supabase
-        .from("rotinas_mensais")
-        .upsert(payload, { onConflict: "rotina_id,ano,mes" });
+      const { error } = await supabase.from("rotinas_mensais").upsert(
+        {
+          rotina_id: rotinaId,
+          ano: 2026,
+          mes: mesId,
+          valor_realizado: valorNum,
+        },
+        { onConflict: "rotina_id,ano,mes" }
+      );
 
       if (error) console.error("Erro ao salvar realizado:", error);
     } catch (e) {
@@ -401,7 +403,6 @@ const ManutencaoRotinas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-
       const el = tableWrapRef.current;
       if (!el) return;
 
@@ -413,10 +414,12 @@ const ManutencaoRotinas = () => {
 
       const mime = format === "jpg" ? "image/jpeg" : "image/png";
       const ext = format === "jpg" ? "jpg" : "png";
+      const dataUrl = canvas.toDataURL(
+        mime,
+        format === "jpg" ? 0.92 : undefined
+      );
 
-      const dataUrl = canvas.toDataURL(mime, format === "jpg" ? 0.92 : undefined);
       const a = document.createElement("a");
-
       const areaName =
         areas.find((a) => a.id === areaSelecionada)?.nome || "Gestao_de_Frota";
 
@@ -466,7 +469,9 @@ const ManutencaoRotinas = () => {
           </div>
 
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
+            <span className="text-xs text-gray-500 font-semibold">
+              Responsável:
+            </span>
             <select
               value={responsavelFiltro}
               onChange={(e) => setResponsavelFiltro(e.target.value)}
@@ -486,7 +491,7 @@ const ManutencaoRotinas = () => {
           <div className="flex items-center gap-2 mr-2">
             <button
               onClick={() => setShowConfig(true)}
-              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
+              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full"
               title="Configurações"
             >
               <Settings size={18} />
@@ -498,7 +503,7 @@ const ManutencaoRotinas = () => {
               <button
                 key={area.id}
                 onClick={() => setAreaSelecionada(area.id)}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 ${
                   areaSelecionada === area.id
                     ? "border-blue-600 text-blue-700 bg-blue-50"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
@@ -513,90 +518,69 @@ const ManutencaoRotinas = () => {
 
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados.</div>
+          <div className="text-center py-10 text-gray-500 animate-pulse">
+            Carregando dados...
+          </div>
         ) : (
-          <div className="border border-gray-300 rounded-xl shadow-sm overflow-x-auto overflow-y-hidden">
-            <div ref={tableWrapRef} className="min-w-max">
-              <table className="table-fixed text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-[#d0e0e3] text-gray-800 text-center font-bold">
-                    <th className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-[#d0e0e3] z-20 text-left">
-                      Indicador
+          <div
+            ref={tableWrapRef}
+            className="border rounded-xl overflow-hidden shadow-sm w-full"
+          >
+            <table className="w-full table-fixed text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-[#d0e0e3] text-center font-bold">
+                  <th className="p-1 w-[16%] sticky left-0 bg-[#d0e0e3] z-10 text-left border border-gray-300">
+                    Indicador
+                  </th>
+                  <th className="p-1 w-[6%] border border-gray-300">UNID.</th>
+                  <th className="p-1 w-[9%] border border-gray-300">Responsável</th>
+                  <th className="p-1 w-[4%] border border-gray-300">Peso</th>
+                  <th className="p-1 w-[4%] border border-gray-300">Tipo</th>
+
+                  {MESES.map((m) => (
+                    <th
+                      key={m.id}
+                      className="p-1 border border-gray-300 text-[10px]"
+                      style={{ width: "4.8%" }}
+                    >
+                      {m.label}
                     </th>
+                  ))}
+                </tr>
+              </thead>
 
-                    <th className="px-2 py-1 border border-gray-300 w-[64px]">UNID.</th>
-                    <th className="px-2 py-1 border border-gray-300 w-[120px] text-left">
-                      Responsável
-                    </th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Peso</th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Tipo</th>
+              <tbody>
+                {rotinasFiltradas.map((row) => (
+                  <tr key={row.id} className="hover:bg-gray-50 text-center">
+                    <td className="p-1 text-left font-semibold sticky left-0 bg-white z-10 border border-gray-300 leading-tight break-words">
+                      {row.nome_indicador || row.indicador || row.nome}
+                    </td>
 
-                    {MESES.map((mes) => (
-                      <th
-                        key={mes.id}
-                        className="px-2 py-1 border border-gray-300 w-[78px] whitespace-nowrap"
-                      >
-                        {mes.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {rotinasFiltradas.map((row, idx) => (
-                    <tr key={row.id || idx} className="hover:bg-gray-50 text-center">
-                      <td className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-white z-10 text-left font-semibold text-gray-800">
-                        {row.nome_indicador || row.indicador || row.nome}
-                      </td>
-
-                      <td className="px-2 py-1 border border-gray-300 w-[64px]">
+                    <td className="p-1 border border-gray-300 align-top">
+                      <div className="text-[10px] font-semibold text-gray-700">
                         {getUnidadeLabel(row.unidade) || "-"}
-                      </td>
+                      </div>
+                      <div className="text-[9px] text-gray-400 font-normal mt-0.5 leading-tight">
+                        {String(row.unidade || "").trim().toLowerCase()}
+                      </div>
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[120px] text-left">
-                        {row.responsavel || "-"}
-                      </td>
+                    <td className="p-1 text-left text-[10px] border border-gray-300 leading-tight break-words">
+                      {row.responsavel || "-"}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
-                        {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
-                      </td>
+                    <td className="p-1 bg-gray-50 border border-gray-300 text-center">
+                      {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
-                        {row.tipo_comparacao}
-                      </td>
+                    <td className="p-1 font-mono text-gray-500 border border-gray-300 text-center text-[10px]">
+                      {row.tipo_comparacao}
+                    </td>
 
-                      {MESES.map((mes) => {
-                        const dados = row.meses[mes.id] || {};
+                    {MESES.map((mes) => {
+                      const dados = row.meses[mes.id] || {};
 
-                        if (row._isBinary) {
-                          return (
-                            <td
-                              key={mes.id}
-                              className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                                dados?.color || "bg-white"
-                              }`}
-                            >
-                              <div className="flex flex-col h-full justify-between">
-                                <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                  {numToBoolLabel(dados.alvo)}
-                                </div>
-
-                                <select
-                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                  value={numToBoolLabel(dados.realizado)}
-                                  onChange={(e) =>
-                                    handleSave(row.id, mes.id, e.target.value, row)
-                                  }
-                                >
-                                  <option value="">-</option>
-                                  <option value="Sim">Sim</option>
-                                  <option value="Não">Não</option>
-                                </select>
-                              </div>
-                            </td>
-                          );
-                        }
-
+                      if (mes.id === 14) {
                         const valorRealizado =
                           dados?.realizado === null ||
                           dados?.realizado === "" ||
@@ -607,55 +591,121 @@ const ManutencaoRotinas = () => {
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                              dados?.color || "bg-white"
-                            }`}
+                            className="border border-gray-300 p-0 h-10 align-middle bg-white"
                           >
-                            <div className="flex flex-col h-full justify-between">
-                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                {dados?.alvo !== null && dados?.alvo !== undefined
-                                  ? Number(dados.alvo).toFixed(2)
-                                  : ""}
-                              </div>
-
+                            <div className="flex flex-col h-full justify-center">
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                className="w-full text-center bg-transparent font-bold text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
                                 placeholder="-"
-                                defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
-                                onBlur={(e) => handleSave(row.id, mes.id, e.target.value, row)}
+                                defaultValue={
+                                  valorRealizado === ""
+                                    ? ""
+                                    : String(valorRealizado)
+                                }
+                                onBlur={(e) =>
+                                  handleSave(row.id, 14, e.target.value, row)
+                                }
                               />
                             </div>
                           </td>
                         );
-                      })}
-                    </tr>
-                  ))}
+                      }
 
-                  <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
-                    <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
-                      TOTAL SCORE
-                    </td>
+                      if (row._isBinary) {
+                        const alvoLabel = numToBoolLabel(dados.alvo ?? 1);
+                        const realLabel = numToBoolLabel(dados.realizado);
 
-                    <td className="px-2 py-1 border-r border-red-500"></td>
-                    <td className="px-2 py-1 border-r border-red-500"></td>
+                        return (
+                          <td
+                            key={mes.id}
+                            className={`border border-gray-300 p-0 h-10 align-middle ${
+                              dados.color || "bg-white"
+                            }`}
+                          >
+                            <div className="flex flex-col h-full justify-between">
+                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                {alvoLabel || "Sim"}
+                              </div>
 
-                    <td className="px-2 py-1 border-r border-red-500 text-center">
-                      {Number(totalPeso || 0).toFixed(0)}
-                    </td>
+                              <select
+                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
+                                value={realLabel || ""}
+                                onChange={(e) =>
+                                  handleSave(row.id, mes.id, e.target.value, row)
+                                }
+                              >
+                                <option value="">-</option>
+                                <option value="Sim">Sim</option>
+                                <option value="Não">Não</option>
+                              </select>
+                            </div>
+                          </td>
+                        );
+                      }
 
-                    <td className="px-2 py-1 border-r border-red-500"></td>
+                      const valorRealizado =
+                        dados?.realizado === "" ||
+                        dados?.realizado === null ||
+                        Number.isNaN(dados?.realizado)
+                          ? ""
+                          : dados.realizado;
 
-                    {MESES.map((mes) => (
-                      <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
-                        {getTotalScore(mes.id)}
-                      </td>
-                    ))}
+                      return (
+                        <td
+                          key={mes.id}
+                          className={`border border-gray-300 p-0 h-10 align-middle ${
+                            dados.color || "bg-white"
+                          }`}
+                        >
+                          <div className="flex flex-col h-full justify-between">
+                            <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                              {dados.alvo !== null && dados.alvo !== undefined
+                                ? Number(dados.alvo).toFixed(2)
+                                : ""}
+                            </div>
+
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="w-full text-center bg-transparent font-bold text-[11px] focus:outline-none h-full pb-1 focus:bg-white/50"
+                              placeholder="-"
+                              defaultValue={
+                                valorRealizado === ""
+                                  ? ""
+                                  : String(valorRealizado)
+                              }
+                              onBlur={(e) =>
+                                handleSave(row.id, mes.id, e.target.value, row)
+                              }
+                            />
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
-                </tbody>
-              </table>
-            </div>
+                ))}
+
+                <tr className="bg-red-600 text-white font-bold border-t-2">
+                  <td className="p-2 sticky left-0 bg-red-600 z-10 text-right pr-4 border border-red-500">
+                    TOTAL SCORE
+                  </td>
+                  <td className="p-2 border border-red-500"></td>
+                  <td className="p-2 border border-red-500"></td>
+                  <td className="p-2 text-center border border-red-500">
+                    {Number(totalPeso || 0).toFixed(0)}
+                  </td>
+                  <td className="p-2 border border-red-500"></td>
+
+                  {MESES.map((m) => (
+                    <td key={m.id} className="p-2 text-center border border-red-500">
+                      {m.id === 14 ? "-" : getTotalScore(m.id)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </div>
