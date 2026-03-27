@@ -1,11 +1,13 @@
-// src/pages/ManutencaoMetas.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
-const ID_MANUTENCAO = 2;
+const AREAS_MANUTENCAO = [
+  { id: 2, nome: "Frota" },
+  { id: 9, nome: "PCM" },
+];
 
 // ✅ UNID (somente leitura na tela Metas)
 const UNIDADES = [
@@ -36,8 +38,8 @@ const MESES = [
   { id: 10, label: "out/26" },
   { id: 11, label: "nov/26" },
   { id: 12, label: "dez/26" },
-  { id: 13, label: "acum/26" }, // ✅ tem alvo/meta azul + realizado
-  { id: 14, label: "média 25" }, // ✅ só realizado (manual), sem meta azul, sem score
+  { id: 13, label: "acum/26" },
+  { id: 14, label: "média 25" },
 ];
 
 function normBoolLabel(v) {
@@ -61,25 +63,20 @@ function numToBoolLabel(v) {
   return n === 1 ? "Sim" : "Não";
 }
 
-/** ✅ Parser único: aceita vírgula ou ponto (PT-BR) */
 function parseNumberPtBr(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return null;
 
   let t = s.replace(/\s+/g, "");
 
-  // "." e "," juntos -> BR: "." milhar, "," decimal
   if (t.includes(".") && t.includes(",")) {
     t = t.replace(/\./g, "").replace(",", ".");
   } else {
-    // só "," -> decimal
     t = t.replace(",", ".");
   }
 
-  // remove lixo
   t = t.replace(/[^0-9.\-]/g, "");
 
-  // remove pontos extras
   const idx = t.indexOf(".");
   if (idx !== -1) {
     t = t.slice(0, idx + 1) + t.slice(idx + 1).replace(/\./g, "");
@@ -90,6 +87,7 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoMetas = () => {
+  const [areaSelecionada, setAreaSelecionada] = useState(2);
   const [metas, setMetas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
@@ -100,14 +98,15 @@ const ManutencaoMetas = () => {
   useEffect(() => {
     fetchMetasData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [areaSelecionada]);
 
-  // ✅ Fonte da verdade do binário: metas_farol.unidade
   const isBinaryMeta = (metaRow) => {
     const unidade = String(metaRow?.unidade ?? "").trim().toLowerCase();
-    if (unidade === "binario" || unidade === "binário" || unidade === "boolean")
-      return true;
-    return false;
+    return (
+      unidade === "binario" ||
+      unidade === "binário" ||
+      unidade === "boolean"
+    );
   };
 
   const fetchMetasData = async () => {
@@ -116,7 +115,7 @@ const ManutencaoMetas = () => {
       const { data: metasDef, error: err1 } = await supabase
         .from("metas_farol")
         .select("*")
-        .eq("area_id", ID_MANUTENCAO)
+        .eq("area_id", areaSelecionada)
         .order("id");
 
       if (err1) throw err1;
@@ -143,7 +142,6 @@ const ManutencaoMetas = () => {
             (x) => x.meta_id === m.id && x.mes === mes.id
           );
 
-          // ✅ Realizado: numérico OU binário (1/0)
           let real = "";
           if (
             realObj &&
@@ -154,7 +152,6 @@ const ManutencaoMetas = () => {
             real = parsed === null ? "" : parsed;
           }
 
-          // ✅ MÉDIA 25 (mes=14): só realizado, SEM alvo/meta azul e SEM score
           if (mes.id === 14) {
             row.meses[mes.id] = {
               alvo: null,
@@ -170,7 +167,6 @@ const ManutencaoMetas = () => {
             (x) => x.meta_id === m.id && x.mes === mes.id
           );
 
-          // ✅ Alvo: numérico (inclusive 0) OU binário (1/0)
           let alvo = null;
           if (
             alvoObj &&
@@ -181,7 +177,6 @@ const ManutencaoMetas = () => {
             alvo = parsed === null ? null : parsed;
           }
 
-          // ✅ Para binário, se alvo vier null, assume meta "Sim" (1)
           const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
 
           row.meses[mes.id] = {
@@ -208,7 +203,6 @@ const ManutencaoMetas = () => {
     }
   };
 
-  // ✅ Cálculo (numérico + binário) — mantém regra especial para meta=0
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
     if (isBinary) {
       const m = meta === null || meta === undefined ? 1 : Number(meta);
@@ -241,7 +235,6 @@ const ManutencaoMetas = () => {
     const r = parseFloat(realizado);
     const m = parseFloat(meta);
 
-    // ✅ Tratamento especial para meta = 0 (mantido)
     if (m === 0) {
       let multiplicador = 0;
       let cor = "bg-red-200";
@@ -314,17 +307,15 @@ const ManutencaoMetas = () => {
     if (isBinary) {
       valorNum = boolToNum(valor);
     } else {
-      valorNum = parseNumberPtBr(valor); // ✅ aceita vírgula/ponto em TODOS (inclui mês 14)
+      valorNum = parseNumberPtBr(valor);
     }
 
-    // Atualiza UI
     setMetas((prev) =>
       prev.map((m) => {
         if (m.id !== metaId) return m;
         const novoMeses = { ...m.meses };
         const alvoAtual = novoMeses[mesId]?.alvo ?? null;
 
-        // ✅ mes=14 (média 25): não recalcula score, não usa alvo
         if (mesId === 14) {
           novoMeses[mesId] = {
             ...novoMeses[mesId],
@@ -352,18 +343,15 @@ const ManutencaoMetas = () => {
       })
     );
 
-    // Salva no banco
-    const { error } = await supabase
-      .from("resultados_farol")
-      .upsert(
-        {
-          meta_id: metaId,
-          ano: 2026,
-          mes: mesId, // ✅ inclui 14 (média 25)
-          valor_realizado: valorNum,
-        },
-        { onConflict: "meta_id, ano, mes" }
-      );
+    const { error } = await supabase.from("resultados_farol").upsert(
+      {
+        meta_id: metaId,
+        ano: 2026,
+        mes: mesId,
+        valor_realizado: valorNum,
+      },
+      { onConflict: "meta_id,ano,mes" }
+    );
 
     if (error) console.error("Erro ao salvar:", error);
   };
@@ -373,11 +361,8 @@ const ManutencaoMetas = () => {
   }, [metas]);
 
   const getTotalScore = (mesId) => {
-    if (mesId === 14) return "-"; // ✅ Média 25 não entra no score
-    const total = metas.reduce(
-      (acc, m) => acc + (m.meses[mesId]?.score || 0),
-      0
-    );
+    if (mesId === 14) return "-";
+    const total = metas.reduce((acc, m) => acc + (m.meses[mesId]?.score || 0), 0);
     return total.toFixed(1);
   };
 
@@ -402,24 +387,28 @@ const ManutencaoMetas = () => {
       );
       const a = document.createElement("a");
 
+      const areaNome =
+        AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome || "Area";
+
       a.href = dataUrl;
-      a.download = `Farol_Manutencao_2026.${ext}`;
+      a.download = `Farol_${areaNome}_Metas_2026.${ext}`;
       a.click();
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
   };
 
+  const areaNomeAtual =
+    AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome || "Manutenção";
+
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-xl font-bold text-gray-800">
             Farol de Metas — Manutenção
           </h2>
 
-          {/* Baixar Farol */}
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -449,8 +438,20 @@ const ManutencaoMetas = () => {
             )}
           </div>
 
-          <div className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded border border-blue-100 uppercase">
-            MANUTENÇÃO
+          <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden">
+            {AREAS_MANUTENCAO.map((area) => (
+              <button
+                key={area.id}
+                onClick={() => setAreaSelecionada(area.id)}
+                className={`px-3 py-1.5 text-xs font-bold uppercase transition-colors ${
+                  areaSelecionada === area.id
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {area.nome}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -472,7 +473,13 @@ const ManutencaoMetas = () => {
         </div>
       </div>
 
-      {/* Tabela */}
+      <div className="px-6 py-2 border-b bg-white">
+        <p className="text-sm text-gray-500">
+          Exibindo indicadores de:{" "}
+          <span className="font-semibold text-gray-700">{areaNomeAtual}</span>
+        </p>
+      </div>
+
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500 animate-pulse">
@@ -486,20 +493,17 @@ const ManutencaoMetas = () => {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-[#d0e0e3] font-bold text-center">
-                  <th className="p-2 sticky left-0 bg-[#d0e0e3] z-10 w-48">
+                  <th className="p-2 sticky left-0 bg-[#d0e0e3] z-20 border border-gray-300 min-w-[260px] text-left">
                     Indicador
                   </th>
+                  <th className="p-2 border border-gray-300 min-w-[100px]">UNID</th>
+                  <th className="p-2 border border-gray-300 min-w-[140px]">Responsável</th>
+                  <th className="p-2 border border-gray-300 min-w-[80px]">Peso</th>
+                  <th className="p-2 border border-gray-300 min-w-[120px]">Tipo</th>
 
-                  {/* ✅ UNID agora é SOMENTE LEITURA */}
-                  <th className="p-2 border border-gray-300 w-20">UNID.</th>
-
-                  <th className="p-2 w-32">Responsável</th>
-                  <th className="p-2 w-12">Peso</th>
-                  <th className="p-2 w-12">Tipo</th>
-
-                  {MESES.map((m) => (
-                    <th key={m.id} className="p-2 border border-gray-300 min-w-[70px]">
-                      {m.label}
+                  {MESES.map((mes) => (
+                    <th key={mes.id} className="p-2 border border-gray-300 min-w-[95px] uppercase">
+                      {mes.label}
                     </th>
                   ))}
                 </tr>
@@ -507,88 +511,44 @@ const ManutencaoMetas = () => {
 
               <tbody>
                 {metas.map((meta) => (
-                  <tr key={meta.id} className="hover:bg-gray-50 text-center">
-                    <td className="p-2 text-left font-semibold sticky left-0 bg-white z-10 border border-gray-300">
+                  <tr key={meta.id} className="even:bg-gray-50">
+                    <td className="p-2 sticky left-0 bg-inherit z-10 border border-gray-300 font-semibold text-gray-700">
                       {meta.nome_meta || meta.indicador}
                     </td>
 
-                    {/* ✅ UNID somente leitura */}
-                    <td className="p-2 border border-gray-300">
-                      <div className="text-[11px] font-semibold text-gray-700">
-                        {getUnidadeLabel(meta.unidade) || "-"}
-                      </div>
-                      <div className="text-[9px] text-gray-400 font-normal text-left mt-0.5">
-                        {String(meta.unidade || "").trim().toLowerCase()}
-                      </div>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {getUnidadeLabel(meta.unidade)}
                     </td>
 
-                    <td className="p-2 text-left text-[11px] border border-gray-300">
+                    <td className="p-2 border border-gray-300 text-center">
                       {meta.responsavel || "-"}
                     </td>
 
-                    <td className="p-2 bg-gray-50 border border-gray-300">
-                      {parseInt(parseNumberPtBr(meta.peso) ?? 0)}
+                    <td className="p-2 border border-gray-300 text-center font-semibold">
+                      {parseNumberPtBr(meta.peso) ?? 0}
                     </td>
 
-                    <td className="p-2 font-mono text-gray-500 border border-gray-300">
+                    <td className="p-2 border border-gray-300 text-center">
                       {meta.tipo_comparacao}
                     </td>
 
                     {MESES.map((mes) => {
-                      const dados = meta.meses[mes.id];
+                      const dados = meta.meses[mes.id] || {};
 
-                      // ✅ MÉDIA 25 (mes=14): input numérico normal (uncontrolled) + parse só no blur
-                      if (mes.id === 14) {
-                        const valorRealizado =
-                          dados?.realizado === null ||
-                          dados?.realizado === "" ||
-                          Number.isNaN(dados?.realizado)
-                            ? ""
-                            : dados.realizado;
-
-                        return (
-                          <td
-                            key={mes.id}
-                            className="border border-gray-300 p-0 relative h-12 align-middle bg-white"
-                          >
-                            <div className="flex flex-col h-full justify-center">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
-                                placeholder="-"
-                                defaultValue={
-                                  valorRealizado === ""
-                                    ? ""
-                                    : String(valorRealizado)
-                                }
-                                onBlur={(e) =>
-                                  handleSave(meta.id, 14, e.target.value, meta)
-                                }
-                              />
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      // ✅ Binário: select Sim/Não gravando 1/0
                       if (meta._isBinary) {
-                        const alvoLabel = numToBoolLabel(dados.alvo ?? 1);
-                        const realLabel = numToBoolLabel(dados.realizado);
-
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color}`}
+                            className={`border border-gray-300 p-1 relative h-12 align-middle ${dados.color || "bg-white"}`}
                           >
                             <div className="flex flex-col h-full justify-between">
                               <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
-                                {alvoLabel || "Sim"}
+                                {numToBoolLabel(dados.alvo)}
                               </div>
 
                               <select
                                 className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
-                                value={realLabel || ""}
+                                value={numToBoolLabel(dados.realizado)}
                                 onChange={(e) =>
                                   handleSave(meta.id, mes.id, e.target.value, meta)
                                 }
@@ -602,7 +562,6 @@ const ManutencaoMetas = () => {
                         );
                       }
 
-                      // ✅ Numérico: input normal (aceita vírgula/ponto)
                       const valorRealizado =
                         dados?.realizado === null ||
                         dados?.realizado === "" ||
@@ -613,7 +572,7 @@ const ManutencaoMetas = () => {
                       return (
                         <td
                           key={mes.id}
-                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color}`}
+                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color || "bg-white"}`}
                         >
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
@@ -643,24 +602,15 @@ const ManutencaoMetas = () => {
                   </tr>
                 ))}
 
-                {/* TOTAL SCORE */}
                 <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
                   <td className="p-2 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
                     TOTAL SCORE
                   </td>
-
-                  {/* ✅ UNID vazio */}
                   <td className="p-2 border-r border-red-500"></td>
-
-                  {/* Responsável vazio */}
                   <td className="p-2 border-r border-red-500"></td>
-
-                  {/* ✅ soma real dos pesos */}
                   <td className="p-2 border-r border-red-500 text-center">
                     {Number(totalPeso || 0).toFixed(0)}
                   </td>
-
-                  {/* Tipo vazio */}
                   <td className="p-2 border-r border-red-500"></td>
 
                   {MESES.map((m) => (
@@ -680,7 +630,7 @@ const ManutencaoMetas = () => {
 
       {showConfig && (
         <ConfiguracaoGeral
-          areasContexto={[{ id: ID_MANUTENCAO, nome: "Manutenção" }]}
+          areasContexto={AREAS_MANUTENCAO}
           onClose={() => {
             setShowConfig(false);
             fetchMetasData();
