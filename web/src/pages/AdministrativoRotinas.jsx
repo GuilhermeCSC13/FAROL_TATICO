@@ -534,7 +534,7 @@ const AdministrativoRotinas = () => {
                     <th
                       key={m.id}
                       className="p-1 border border-gray-300 text-[10px]"
-                      style={{ width: "4.8%" }}
+                      style={{ width: "4.8%" }
                     >
                       {m.label}
                     </th>
