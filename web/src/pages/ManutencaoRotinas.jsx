@@ -1,11 +1,13 @@
-// src/pages/ManutencaoRotinas.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
-const ID_MANUTENCAO = 2;
+const AREAS_MANUTENCAO = [
+  { id: 2, nome: "Manutenção" },
+  { id: 9, nome: "PCM" },
+];
 
 // ✅ UNID (somente leitura na tela Rotinas, igual padrão)
 const UNIDADES = [
@@ -22,7 +24,6 @@ function getUnidadeLabel(v) {
   return opt?.label || (v ? String(v) : "");
 }
 
-// ✅ adiciona ACUMULADO (mes=13) + MÉDIA 25 (mes=14, manual, sem meta azul)
 const MESES = [
   { id: 1, label: "jan/26" },
   { id: 2, label: "fev/26" },
@@ -36,8 +37,8 @@ const MESES = [
   { id: 10, label: "out/26" },
   { id: 11, label: "nov/26" },
   { id: 12, label: "dez/26" },
-  { id: 13, label: "acum/26" }, // ✅ tem alvo/meta azul + realizado
-  { id: 14, label: "média 25" }, // ✅ só realizado (manual), sem meta azul, sem score
+  { id: 13, label: "acum/26" },
+  { id: 14, label: "média 25" },
 ];
 
 function normBoolLabel(v) {
@@ -61,25 +62,20 @@ function numToBoolLabel(v) {
   return n === 1 ? "Sim" : "Não";
 }
 
-/** ✅ Parser único: aceita vírgula ou ponto (PT-BR) */
 function parseNumberPtBr(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return null;
 
   let t = s.replace(/\s+/g, "");
 
-  // "." e "," juntos -> BR: "." milhar, "," decimal
   if (t.includes(".") && t.includes(",")) {
     t = t.replace(/\./g, "").replace(",", ".");
   } else {
-    // só "," -> decimal
     t = t.replace(",", ".");
   }
 
-  // remove lixo
   t = t.replace(/[^0-9.\-]/g, "");
 
-  // remove pontos extras
   const idx = t.indexOf(".");
   if (idx !== -1) {
     t = t.slice(0, idx + 1) + t.slice(idx + 1).replace(/\./g, "");
@@ -90,16 +86,13 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoRotinas = () => {
-  const [areas, setAreas] = useState([]);
-  const [areaSelecionada, setAreaSelecionada] = useState(null);
+  const [areas, setAreas] = useState(AREAS_MANUTENCAO);
+  const [areaSelecionada, setAreaSelecionada] = useState(2);
   const [rotinas, setRotinas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
-  // ✅ filtro por responsável (padrão)
   const [responsavelFiltro, setResponsavelFiltro] = useState("");
-
-  // ✅ Export (igual padrão)
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
 
@@ -119,38 +112,45 @@ const ManutencaoRotinas = () => {
         .from("areas")
         .select("*")
         .eq("ativa", true)
+        .in("id", [2, 9])
         .order("id");
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const filtered = data.filter((a) => a.id == ID_MANUTENCAO);
-        const lista = filtered.length > 0 ? filtered : data;
-        setAreas(lista);
-        setAreaSelecionada(lista[0].id);
+        const ordenadas = [...data].sort((a, b) => a.id - b.id);
+        setAreas(ordenadas);
+
+        if (!ordenadas.some((a) => a.id === areaSelecionada)) {
+          setAreaSelecionada(ordenadas[0].id);
+        }
       }
     } catch (e) {
       console.error("Erro ao buscar áreas:", e);
+      setAreas(AREAS_MANUTENCAO);
     } finally {
-      if (!areaSelecionada) setLoading(false);
+      setLoading(false);
     }
   };
 
-  // ✅ Fonte da verdade do binário: rotinas_indicadores.unidade
   const isBinaryRotina = (row) => {
     const unidade = String(row?.unidade ?? "").trim().toLowerCase();
-    if (unidade === "binario" || unidade === "binário" || unidade === "boolean") return true;
-    return false;
+    return (
+      unidade === "binario" ||
+      unidade === "binário" ||
+      unidade === "boolean"
+    );
   };
 
-  // ✅ Cálculo (numérico + binário) — idêntico ao padrão
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
     const peso = Number(pesoTotal) || 0;
 
     if (isBinary) {
       const m = meta === null || meta === undefined ? 1 : Number(meta);
       const r =
-        realizado === "" || realizado === null || realizado === undefined ? null : Number(realizado);
+        realizado === "" || realizado === null || realizado === undefined
+          ? null
+          : Number(realizado);
 
       if (r === null || Number.isNaN(r)) {
         return { score: 0, multiplicador: 0, color: "bg-white" };
@@ -164,14 +164,18 @@ const ManutencaoRotinas = () => {
       };
     }
 
-    if (meta === null || realizado === "" || realizado === null || isNaN(parseFloat(realizado))) {
+    if (
+      meta === null ||
+      realizado === "" ||
+      realizado === null ||
+      isNaN(parseFloat(realizado))
+    ) {
       return { score: 0, multiplicador: 0, color: "bg-white" };
     }
 
     const r = parseFloat(realizado);
     const m = parseFloat(meta);
 
-    // ✅ meta = 0 (blindado)
     if (m === 0) {
       let multiplicador = 0;
       let cor = "bg-red-200";
@@ -246,16 +250,20 @@ const ManutencaoRotinas = () => {
         const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
 
         MESES.forEach((mes) => {
-          const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
+          const valObj = valores?.find(
+            (v) => v.rotina_id === r.id && v.mes === mes.id
+          );
 
-          // ✅ realizado
           let real = "";
-          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
+          if (
+            valObj &&
+            valObj.valor_realizado !== null &&
+            valObj.valor_realizado !== ""
+          ) {
             const parsed = parseNumberPtBr(valObj.valor_realizado);
             real = parsed === null ? "" : parsed;
           }
 
-          // ✅ mes=14 (manual): sem meta azul e sem score
           if (mes.id === 14) {
             row.meses[mes.id] = {
               alvo: null,
@@ -267,9 +275,12 @@ const ManutencaoRotinas = () => {
             return;
           }
 
-          // ✅ meta/alvo
           let alvo = null;
-          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
+          if (
+            valObj &&
+            valObj.valor_meta !== null &&
+            valObj.valor_meta !== ""
+          ) {
             const parsed = parseNumberPtBr(valObj.valor_meta);
             alvo = parsed === null ? null : parsed;
           }
@@ -307,7 +318,6 @@ const ManutencaoRotinas = () => {
     if (isBinary) valorNum = boolToNum(valor);
     else valorNum = parseNumberPtBr(valor);
 
-    // Atualiza UI (padrão)
     setRotinas((prev) =>
       prev.map((r) => {
         if (r.id !== rotinaId) return r;
@@ -315,7 +325,6 @@ const ManutencaoRotinas = () => {
         const novoMeses = { ...r.meses };
         const alvoAtual = novoMeses[mesId]?.alvo ?? null;
 
-        // ✅ mes=14: sem score
         if (mesId === 14) {
           novoMeses[mesId] = {
             ...novoMeses[mesId],
@@ -343,13 +352,12 @@ const ManutencaoRotinas = () => {
       })
     );
 
-    // ✅✅✅ SALVAR COM UPSERT (corrige "não está salvando")
     try {
       const payload = {
         rotina_id: rotinaId,
         ano: 2026,
         mes: mesId,
-        valor_realizado: valorNum, // null limpa
+        valor_realizado: valorNum,
       };
 
       const { error } = await supabase
@@ -362,7 +370,6 @@ const ManutencaoRotinas = () => {
     }
   };
 
-  // responsáveis únicos para o filtro
   const responsaveisUnicos = useMemo(() => {
     return Array.from(
       new Set(
@@ -374,16 +381,24 @@ const ManutencaoRotinas = () => {
   }, [rotinas]);
 
   const rotinasFiltradas = useMemo(() => {
-    return responsavelFiltro ? rotinas.filter((r) => r.responsavel === responsavelFiltro) : rotinas;
+    return responsavelFiltro
+      ? rotinas.filter((r) => r.responsavel === responsavelFiltro)
+      : rotinas;
   }, [rotinas, responsavelFiltro]);
 
   const totalPeso = useMemo(() => {
-    return rotinasFiltradas.reduce((acc, r) => acc + (parseNumberPtBr(r.peso) ?? 0), 0);
+    return rotinasFiltradas.reduce(
+      (acc, r) => acc + (parseNumberPtBr(r.peso) ?? 0),
+      0
+    );
   }, [rotinasFiltradas]);
 
   const getTotalScore = (mesId) => {
     if (mesId === 14) return "-";
-    const total = rotinasFiltradas.reduce((acc, r) => acc + (r.meses[mesId]?.score || 0), 0);
+    const total = rotinasFiltradas.reduce(
+      (acc, r) => acc + (r.meses[mesId]?.score || 0),
+      0
+    );
     return total.toFixed(1);
   };
 
@@ -403,10 +418,15 @@ const ManutencaoRotinas = () => {
       const mime = format === "jpg" ? "image/jpeg" : "image/png";
       const ext = format === "jpg" ? "jpg" : "png";
 
-      const dataUrl = canvas.toDataURL(mime, format === "jpg" ? 0.92 : undefined);
+      const dataUrl = canvas.toDataURL(
+        mime,
+        format === "jpg" ? 0.92 : undefined
+      );
       const a = document.createElement("a");
 
-      const areaName = areas.find((a) => a.id === areaSelecionada)?.nome || "Manutencao";
+      const areaName =
+        areas.find((a) => a.id === areaSelecionada)?.nome || "Manutencao";
+
       a.href = dataUrl;
       a.download = `FarolRotinas_${areaName}_2026.${ext}`;
       a.click();
@@ -415,14 +435,17 @@ const ManutencaoRotinas = () => {
     }
   };
 
+  const areaNomeAtual =
+    areas.find((a) => a.id === areaSelecionada)?.nome || "Manutenção";
+
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      {/* Cabeçalho (padrão) */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-800">Farol de Rotinas — Manutenção</h2>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-800">
+            Farol de Rotinas — Manutenção
+          </h2>
 
-          {/* Baixar Farol */}
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -452,9 +475,10 @@ const ManutencaoRotinas = () => {
             )}
           </div>
 
-          {/* Filtro de Responsável */}
           <div className="flex items-center gap-2 ml-2">
-            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
+            <span className="text-xs text-gray-500 font-semibold">
+              Responsável:
+            </span>
             <select
               value={responsavelFiltro}
               onChange={(e) => setResponsavelFiltro(e.target.value)}
@@ -468,30 +492,16 @@ const ManutencaoRotinas = () => {
               ))}
             </select>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          {/* Config */}
-          <div className="flex items-center gap-2 mr-2">
-            <button
-              onClick={() => setShowConfig(true)}
-              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
-              title="Configurações"
-            >
-              <Settings size={18} />
-            </button>
-          </div>
-
-          {/* Seletor de Área (Manutenção) */}
-          <div className="flex space-x-2">
+          <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden">
             {areas.map((area) => (
               <button
                 key={area.id}
                 onClick={() => setAreaSelecionada(area.id)}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
+                className={`px-3 py-1.5 text-xs font-bold uppercase transition-colors ${
                   areaSelecionada === area.id
-                    ? "border-blue-600 text-blue-700 bg-blue-50"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
                 {area.nome}
@@ -499,192 +509,169 @@ const ManutencaoRotinas = () => {
             ))}
           </div>
         </div>
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowConfig(true)}
+            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
+            title="Configurações"
+          >
+            <Settings size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Tabela */}
+      <div className="px-6 py-2 border-b bg-white">
+        <p className="text-sm text-gray-500">
+          Exibindo indicadores de:{" "}
+          <span className="font-semibold text-gray-700">{areaNomeAtual}</span>
+        </p>
+      </div>
+
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
-          <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados...</div>
+          <div className="text-center py-10 text-gray-500 animate-pulse">
+            Carregando dados...
+          </div>
         ) : (
-          <div className="border border-gray-300 rounded-xl shadow-sm overflow-x-auto overflow-y-hidden">
-            <div ref={tableWrapRef} className="min-w-max">
-              <table className="table-fixed text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-[#d0e0e3] text-gray-800 text-center font-bold">
-                    <th className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-[#d0e0e3] z-20 text-left">
-                      Indicador
+          <div
+            ref={tableWrapRef}
+            className="border border-gray-300 rounded-xl overflow-hidden shadow-sm"
+          >
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#d0e0e3] font-bold text-center">
+                  <th className="p-2 sticky left-0 bg-[#d0e0e3] z-20 border border-gray-300 min-w-[260px] text-left">
+                    Indicador
+                  </th>
+                  <th className="p-2 border border-gray-300 min-w-[100px]">UNID</th>
+                  <th className="p-2 border border-gray-300 min-w-[140px]">Responsável</th>
+                  <th className="p-2 border border-gray-300 min-w-[80px]">Peso</th>
+                  <th className="p-2 border border-gray-300 min-w-[120px]">Tipo</th>
+
+                  {MESES.map((mes) => (
+                    <th key={mes.id} className="p-2 border border-gray-300 min-w-[95px] uppercase">
+                      {mes.label}
                     </th>
+                  ))}
+                </tr>
+              </thead>
 
-                    <th className="px-2 py-1 border border-gray-300 w-[64px]">UNID.</th>
+              <tbody>
+                {rotinasFiltradas.map((row) => (
+                  <tr key={row.id} className="even:bg-gray-50">
+                    <td className="p-2 sticky left-0 bg-inherit z-10 border border-gray-300 font-semibold text-gray-700">
+                      {row.nome_indicador || row.indicador || row.nome}
+                    </td>
 
-                    <th className="px-2 py-1 border border-gray-300 w-[120px] text-left">
-                      Responsável
-                    </th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Peso</th>
-                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Tipo</th>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {getUnidadeLabel(row.unidade)}
+                    </td>
 
-                    {MESES.map((mes) => (
-                      <th
-                        key={mes.id}
-                        className="px-2 py-1 border border-gray-300 w-[78px] whitespace-nowrap"
-                      >
-                        {mes.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {row.responsavel || "-"}
+                    </td>
 
-                <tbody>
-                  {rotinasFiltradas.map((row, idx) => (
-                    <tr key={row.id || idx} className="hover:bg-gray-50 text-center">
-                      <td className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-white z-10 text-left font-semibold text-gray-800">
-                        {row.indicador}
-                      </td>
+                    <td className="p-2 border border-gray-300 text-center font-semibold">
+                      {parseNumberPtBr(row.peso) ?? 0}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[64px]">
-                        <div className="text-[10px] font-semibold text-gray-700 leading-3">
-                          {getUnidadeLabel(row.unidade) || "-"}
-                        </div>
-                        <div className="text-[9px] text-gray-400 font-normal text-left mt-0.5 leading-3">
-                          {String(row.unidade || "").trim().toLowerCase()}
-                        </div>
-                      </td>
+                    <td className="p-2 border border-gray-300 text-center">
+                      {row.tipo_comparacao}
+                    </td>
 
-                      <td className="px-2 py-1 border border-gray-300 w-[120px] text-[10px] text-gray-700 text-left">
-                        {row.responsavel || "-"}
-                      </td>
+                    {MESES.map((mes) => {
+                      const dados = row.meses[mes.id] || {};
 
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
-                        {parseInt(parseNumberPtBr(row.peso) ?? 0, 10)}
-                      </td>
-
-                      <td className="px-2 py-1 border border-gray-300 w-[48px] font-mono text-gray-500">
-                        {row.tipo_comparacao}
-                      </td>
-
-                      {MESES.map((mes) => {
-                        const dados = row.meses[mes.id];
-
-                        // ✅ MÉDIA 25 (mes=14) — só realizado, sem score
-                        if (mes.id === 14) {
-                          const valorRealizado =
-                            dados?.realizado === null ||
-                            dados?.realizado === "" ||
-                            Number.isNaN(dados?.realizado)
-                              ? ""
-                              : dados.realizado;
-
-                          return (
-                            <td
-                              key={mes.id}
-                              className="border border-gray-300 p-0 relative h-10 align-middle bg-white w-[78px]"
-                            >
-                              <div className="flex flex-col h-full justify-center">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                  placeholder="-"
-                                  defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
-                                  onBlur={(e) => handleSave(row.id, 14, e.target.value, row)}
-                                />
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        // ✅ Binário
-                        if (row._isBinary) {
-                          const alvoLabel = numToBoolLabel(dados?.alvo ?? 1);
-                          const realLabel = numToBoolLabel(dados?.realizado);
-
-                          return (
-                            <td
-                              key={mes.id}
-                              className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                                dados?.color || "bg-white"
-                              }`}
-                            >
-                              <div className="flex flex-col h-full justify-between">
-                                <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                  {alvoLabel || "Sim"}
-                                </div>
-
-                                <select
-                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                  value={realLabel || ""}
-                                  onChange={(e) => handleSave(row.id, mes.id, e.target.value, row)}
-                                >
-                                  <option value="">-</option>
-                                  <option value="Sim">Sim</option>
-                                  <option value="Não">Não</option>
-                                </select>
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        // ✅ Numérico
-                        const valorRealizado =
-                          dados?.realizado === null ||
-                          dados?.realizado === "" ||
-                          Number.isNaN(dados?.realizado)
-                            ? ""
-                            : dados.realizado;
-
+                      if (row._isBinary) {
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
-                              dados?.color || "bg-white"
-                            }`}
+                            className={`border border-gray-300 p-1 relative h-12 align-middle ${dados.color || "bg-white"}`}
                           >
                             <div className="flex flex-col h-full justify-between">
-                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
-                                {dados?.alvo !== null && dados?.alvo !== undefined
-                                  ? Number(dados.alvo).toFixed(2)
-                                  : ""}
+                              <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
+                                {numToBoolLabel(dados.alvo)}
                               </div>
 
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
-                                placeholder="-"
-                                defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
-                                onBlur={(e) => handleSave(row.id, mes.id, e.target.value, row)}
-                              />
+                              <select
+                                className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
+                                value={numToBoolLabel(dados.realizado)}
+                                onChange={(e) =>
+                                  handleSave(row.id, mes.id, e.target.value, row)
+                                }
+                              >
+                                <option value="">-</option>
+                                <option value="Sim">Sim</option>
+                                <option value="Não">Não</option>
+                              </select>
                             </div>
                           </td>
                         );
-                      })}
-                    </tr>
-                  ))}
+                      }
 
-                  {/* TOTAL SCORE */}
-                  <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
-                    <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
-                      TOTAL SCORE
-                    </td>
+                      const valorRealizado =
+                        dados?.realizado === null ||
+                        dados?.realizado === "" ||
+                        Number.isNaN(dados?.realizado)
+                          ? ""
+                          : dados.realizado;
 
-                    <td className="px-2 py-1 border-r border-red-500"></td>
-                    <td className="px-2 py-1 border-r border-red-500"></td>
+                      return (
+                        <td
+                          key={mes.id}
+                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color || "bg-white"}`}
+                        >
+                          <div className="flex flex-col h-full justify-between">
+                            <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
+                              {dados.alvo !== null && dados.alvo !== undefined
+                                ? Number(dados.alvo).toFixed(2)
+                                : ""}
+                            </div>
 
-                    <td className="px-2 py-1 border-r border-red-500 text-center">
-                      {Number(totalPeso || 0).toFixed(0)}
-                    </td>
-
-                    <td className="px-2 py-1 border-r border-red-500"></td>
-
-                    {MESES.map((mes) => (
-                      <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
-                        {getTotalScore(mes.id)}
-                      </td>
-                    ))}
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                              placeholder="-"
+                              defaultValue={
+                                valorRealizado === ""
+                                  ? ""
+                                  : String(valorRealizado)
+                              }
+                              onBlur={(e) =>
+                                handleSave(row.id, mes.id, e.target.value, row)
+                              }
+                            />
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
-                </tbody>
-              </table>
-            </div>
+                ))}
+
+                <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
+                  <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
+                    TOTAL SCORE
+                  </td>
+
+                  <td className="px-2 py-1 border-r border-red-500"></td>
+                  <td className="px-2 py-1 border-r border-red-500"></td>
+
+                  <td className="px-2 py-1 border-r border-red-500 text-center">
+                    {Number(totalPeso || 0).toFixed(0)}
+                  </td>
+
+                  <td className="px-2 py-1 border-r border-red-500"></td>
+
+                  {MESES.map((mes) => (
+                    <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
+                      {getTotalScore(mes.id)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </div>
