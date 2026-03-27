@@ -4,12 +4,16 @@ import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
 
+// IDs fixos das áreas
+const ID_GESTAO_FROTA = 2;
+const ID_PCM = 9;
+
 const AREAS_MANUTENCAO = [
-  { id: 2, nome: "Frota" },
-  { id: 9, nome: "PCM" },
+  { id: ID_GESTAO_FROTA, nome: "Gestão de Frota" },
+  { id: ID_PCM, nome: "PCM" },
 ];
 
-// ✅ UNID (somente leitura na tela Metas)
+// UNID (somente leitura)
 const UNIDADES = [
   { value: "kml", label: "km/l" },
   { value: "currency", label: "R$" },
@@ -24,7 +28,6 @@ function getUnidadeLabel(v) {
   return opt?.label || (v ? String(v) : "");
 }
 
-// ✅ adiciona ACUMULADO (mes=13) + MÉDIA 25 (mes=14, manual, sem meta azul)
 const MESES = [
   { id: 1, label: "jan/26" },
   { id: 2, label: "fev/26" },
@@ -87,7 +90,7 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoMetas = () => {
-  const [areaSelecionada, setAreaSelecionada] = useState(2);
+  const [areaSelecionada, setAreaSelecionada] = useState(ID_GESTAO_FROTA);
   const [metas, setMetas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
@@ -102,11 +105,7 @@ const ManutencaoMetas = () => {
 
   const isBinaryMeta = (metaRow) => {
     const unidade = String(metaRow?.unidade ?? "").trim().toLowerCase();
-    return (
-      unidade === "binario" ||
-      unidade === "binário" ||
-      unidade === "boolean"
-    );
+    return unidade === "binario" || unidade === "binário" || unidade === "boolean";
   };
 
   const fetchMetasData = async () => {
@@ -387,26 +386,24 @@ const ManutencaoMetas = () => {
       );
       const a = document.createElement("a");
 
-      const areaNome =
-        AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome || "Area";
+      const areaName =
+        AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome ||
+        "Gestao_de_Frota";
 
       a.href = dataUrl;
-      a.download = `Farol_${areaNome}_Metas_2026.${ext}`;
+      a.download = `Farol_${areaName}_2026.${ext}`;
       a.click();
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
   };
 
-  const areaNomeAtual =
-    AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome || "Manutenção";
-
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-800">
-            Farol de Metas — Manutenção
+            Farol de Metas — Gestão de Frota
           </h2>
 
           <div className="relative">
@@ -437,16 +434,28 @@ const ManutencaoMetas = () => {
               </div>
             )}
           </div>
+        </div>
 
-          <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 mr-4 pr-4">
+            <button
+              onClick={() => setShowConfig(true)}
+              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full transition-colors"
+              title="Configurações"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
+
+          <div className="flex space-x-2">
             {AREAS_MANUTENCAO.map((area) => (
               <button
                 key={area.id}
                 onClick={() => setAreaSelecionada(area.id)}
-                className={`px-3 py-1.5 text-xs font-bold uppercase transition-colors ${
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
                   areaSelecionada === area.id
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-50"
+                    ? "border-blue-600 text-blue-700 bg-blue-50"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                 }`}
               >
                 {area.nome}
@@ -454,176 +463,158 @@ const ManutencaoMetas = () => {
             ))}
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => (window.location.hash = "rotinas")}
-            className="px-3 py-1 text-sm font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-100 rounded"
-          >
-            Ir para Rotinas
-          </button>
-
-          <button
-            onClick={() => setShowConfig(true)}
-            className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-gray-100"
-            title="Configurações"
-          >
-            <Settings size={18} />
-          </button>
-        </div>
-      </div>
-
-      <div className="px-6 py-2 border-b bg-white">
-        <p className="text-sm text-gray-500">
-          Exibindo indicadores de:{" "}
-          <span className="font-semibold text-gray-700">{areaNomeAtual}</span>
-        </p>
       </div>
 
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500 animate-pulse">
-            Carregando dados...
+            Carregando dados.
           </div>
         ) : (
-          <div
-            ref={tableWrapRef}
-            className="border border-gray-300 rounded-xl overflow-hidden shadow-sm"
-          >
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#d0e0e3] font-bold text-center">
-                  <th className="p-2 sticky left-0 bg-[#d0e0e3] z-20 border border-gray-300 min-w-[260px] text-left">
-                    Indicador
-                  </th>
-                  <th className="p-2 border border-gray-300 min-w-[100px]">UNID</th>
-                  <th className="p-2 border border-gray-300 min-w-[140px]">Responsável</th>
-                  <th className="p-2 border border-gray-300 min-w-[80px]">Peso</th>
-                  <th className="p-2 border border-gray-300 min-w-[120px]">Tipo</th>
-
-                  {MESES.map((mes) => (
-                    <th key={mes.id} className="p-2 border border-gray-300 min-w-[95px] uppercase">
-                      {mes.label}
+          <div className="border border-gray-300 rounded-xl shadow-sm overflow-x-auto overflow-y-hidden">
+            <div ref={tableWrapRef} className="min-w-max">
+              <table className="table-fixed text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-[#d0e0e3] text-gray-800 text-center font-bold">
+                    <th className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-[#d0e0e3] z-20 text-left">
+                      Indicador
                     </th>
-                  ))}
-                </tr>
-              </thead>
+                    <th className="px-2 py-1 border border-gray-300 w-[64px]">UNID.</th>
+                    <th className="px-2 py-1 border border-gray-300 w-[120px] text-left">
+                      Responsável
+                    </th>
+                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Peso</th>
+                    <th className="px-2 py-1 border border-gray-300 w-[48px]">Tipo</th>
 
-              <tbody>
-                {metas.map((meta) => (
-                  <tr key={meta.id} className="even:bg-gray-50">
-                    <td className="p-2 sticky left-0 bg-inherit z-10 border border-gray-300 font-semibold text-gray-700">
-                      {meta.nome_meta || meta.indicador}
-                    </td>
+                    {MESES.map((mes) => (
+                      <th
+                        key={mes.id}
+                        className="px-2 py-1 border border-gray-300 w-[78px] whitespace-nowrap"
+                      >
+                        {mes.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {getUnidadeLabel(meta.unidade)}
-                    </td>
+                <tbody>
+                  {metas.map((meta, idx) => (
+                    <tr key={meta.id || idx} className="hover:bg-gray-50 text-center">
+                      <td className="px-2 py-1 border border-gray-300 w-[260px] sticky left-0 bg-white z-10 text-left font-semibold text-gray-800">
+                        {meta.nome_meta || meta.indicador}
+                      </td>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {meta.responsavel || "-"}
-                    </td>
+                      <td className="px-2 py-1 border border-gray-300 w-[64px]">
+                        {getUnidadeLabel(meta.unidade) || "-"}
+                      </td>
 
-                    <td className="p-2 border border-gray-300 text-center font-semibold">
-                      {parseNumberPtBr(meta.peso) ?? 0}
-                    </td>
+                      <td className="px-2 py-1 border border-gray-300 w-[120px] text-left">
+                        {meta.responsavel || "-"}
+                      </td>
 
-                    <td className="p-2 border border-gray-300 text-center">
-                      {meta.tipo_comparacao}
-                    </td>
+                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
+                        {parseInt(parseNumberPtBr(meta.peso) ?? 0, 10)}
+                      </td>
 
-                    {MESES.map((mes) => {
-                      const dados = meta.meses[mes.id] || {};
+                      <td className="px-2 py-1 border border-gray-300 w-[48px] bg-gray-50">
+                        {meta.tipo_comparacao}
+                      </td>
 
-                      if (meta._isBinary) {
+                      {MESES.map((mes) => {
+                        const dados = meta.meses[mes.id] || {};
+
+                        if (meta._isBinary) {
+                          return (
+                            <td
+                              key={mes.id}
+                              className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
+                                dados?.color || "bg-white"
+                              }`}
+                            >
+                              <div className="flex flex-col h-full justify-between">
+                                <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                  {numToBoolLabel(dados.alvo)}
+                                </div>
+
+                                <select
+                                  className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                  value={numToBoolLabel(dados.realizado)}
+                                  onChange={(e) =>
+                                    handleSave(meta.id, mes.id, e.target.value, meta)
+                                  }
+                                >
+                                  <option value="">-</option>
+                                  <option value="Sim">Sim</option>
+                                  <option value="Não">Não</option>
+                                </select>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        const valorRealizado =
+                          dados?.realizado === null ||
+                          dados?.realizado === "" ||
+                          Number.isNaN(dados?.realizado)
+                            ? ""
+                            : dados.realizado;
+
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-1 relative h-12 align-middle ${dados.color || "bg-white"}`}
+                            className={`border border-gray-300 p-0 relative h-10 align-middle w-[78px] ${
+                              dados?.color || "bg-white"
+                            }`}
                           >
                             <div className="flex flex-col h-full justify-between">
-                              <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
-                                {numToBoolLabel(dados.alvo)}
+                              <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
+                                {dados?.alvo !== null && dados?.alvo !== undefined
+                                  ? Number(dados.alvo).toFixed(2)
+                                  : ""}
                               </div>
 
-                              <select
-                                className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
-                                value={numToBoolLabel(dados.realizado)}
-                                onChange={(e) =>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
+                                placeholder="-"
+                                defaultValue={
+                                  valorRealizado === "" ? "" : String(valorRealizado)
+                                }
+                                onBlur={(e) =>
                                   handleSave(meta.id, mes.id, e.target.value, meta)
                                 }
-                              >
-                                <option value="">-</option>
-                                <option value="Sim">Sim</option>
-                                <option value="Não">Não</option>
-                              </select>
+                              />
                             </div>
                           </td>
                         );
-                      }
-
-                      const valorRealizado =
-                        dados?.realizado === null ||
-                        dados?.realizado === "" ||
-                        Number.isNaN(dados?.realizado)
-                          ? ""
-                          : dados.realizado;
-
-                      return (
-                        <td
-                          key={mes.id}
-                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color || "bg-white"}`}
-                        >
-                          <div className="flex flex-col h-full justify-between">
-                            <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
-                              {dados.alvo !== null && dados.alvo !== undefined
-                                ? Number(dados.alvo).toFixed(2)
-                                : ""}
-                            </div>
-
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50 transition-colors"
-                              placeholder="-"
-                              defaultValue={
-                                valorRealizado === ""
-                                  ? ""
-                                  : String(valorRealizado)
-                              }
-                              onBlur={(e) =>
-                                handleSave(meta.id, mes.id, e.target.value, meta)
-                              }
-                            />
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-
-                <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
-                  <td className="p-2 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
-                    TOTAL SCORE
-                  </td>
-                  <td className="p-2 border-r border-red-500"></td>
-                  <td className="p-2 border-r border-red-500"></td>
-                  <td className="p-2 border-r border-red-500 text-center">
-                    {Number(totalPeso || 0).toFixed(0)}
-                  </td>
-                  <td className="p-2 border-r border-red-500"></td>
-
-                  {MESES.map((m) => (
-                    <td
-                      key={m.id}
-                      className="p-2 text-center border-r border-red-500 text-sm"
-                    >
-                      {getTotalScore(m.id)}
-                    </td>
+                      })}
+                    </tr>
                   ))}
-                </tr>
-              </tbody>
-            </table>
+
+                  <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
+                    <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
+                      TOTAL SCORE
+                    </td>
+
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+
+                    <td className="px-2 py-1 border-r border-red-500 text-center">
+                      {Number(totalPeso || 0).toFixed(0)}
+                    </td>
+
+                    <td className="px-2 py-1 border-r border-red-500"></td>
+
+                    {MESES.map((mes) => (
+                      <td key={mes.id} className="px-2 py-1 text-center border-r border-red-500">
+                        {getTotalScore(mes.id)}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
