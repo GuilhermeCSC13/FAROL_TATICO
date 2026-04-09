@@ -1,4 +1,3 @@
-// src/pages/OperacaoRotinas.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
@@ -38,8 +37,8 @@ const MESES = [
   { id: 10, label: "out/26" },
   { id: 11, label: "nov/26" },
   { id: 12, label: "dez/26" },
-  { id: 13, label: "acum/26" }, // ✅ tem alvo/meta azul + realizado
-  { id: 14, label: "média 25" }, // ✅ só realizado (manual), sem meta azul, sem score
+  { id: 13, label: "acum/26" },
+  { id: 14, label: "média 25" },
 ];
 
 function normBoolLabel(v) {
@@ -126,7 +125,7 @@ const OperacaoRotinas = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const filtered = data.filter((a) => a.id == ID_PCO || a.id == ID_MOTORISTAS);
+        const filtered = data.filter((a) => a.id === ID_PCO || a.id === ID_MOTORISTAS);
         const lista = filtered.length > 0 ? filtered : data;
         setAreas(lista);
         setAreaSelecionada(lista[0].id);
@@ -234,7 +233,7 @@ const OperacaoRotinas = () => {
         .from("rotinas_indicadores")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("ordem", { ascending: true });
+        .order("peso", { ascending: false });
 
       if (err1) throw err1;
 
@@ -247,55 +246,60 @@ const OperacaoRotinas = () => {
       if (err2) throw err2;
 
       // 3) Cruzamento (padrão)
-      const combined = (defs || []).map((r) => {
-        const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
+      const combined = (defs || [])
+        .map((r) => {
+          const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
 
-        MESES.forEach((mes) => {
-          const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
+          MESES.forEach((mes) => {
+            const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
 
-          // ✅ realizado
-          let real = "";
-          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            // ✅ realizado
+            let real = "";
+            if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          // ✅ mes=14 (manual): sem meta azul e sem score
-          if (mes.id === 14) {
+            // ✅ mes=14 (manual): sem meta azul e sem score
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            // ✅ meta/alvo
+            let alvo = null;
+            if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                r.tipo_comparacao,
+                parseNumberPtBr(r.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          // ✅ meta/alvo
-          let alvo = null;
-          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              r.tipo_comparacao,
-              parseNumberPtBr(r.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setRotinas(combined);
     } catch (error) {
@@ -348,13 +352,12 @@ const OperacaoRotinas = () => {
       })
     );
 
-    // ✅✅✅ Salva no banco (UPSERT) — cria a linha se não existir (igual Moov/Manutenção ajustados)
     try {
       const payload = {
         rotina_id: rotinaId,
         ano: 2026,
         mes: mesId,
-        valor_realizado: valorNum, // null apaga
+        valor_realizado: valorNum,
       };
 
       const { error } = await supabase
@@ -379,7 +382,14 @@ const OperacaoRotinas = () => {
   }, [rotinas]);
 
   const rotinasFiltradas = useMemo(() => {
-    return responsavelFiltro ? rotinas.filter((r) => r.responsavel === responsavelFiltro) : rotinas;
+    const base = responsavelFiltro
+      ? rotinas.filter((r) => r.responsavel === responsavelFiltro)
+      : rotinas;
+
+    return [...base].sort(
+      (a, b) =>
+        (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+    );
   }, [rotinas, responsavelFiltro]);
 
   const totalPeso = useMemo(() => {
