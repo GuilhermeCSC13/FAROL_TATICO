@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
-import { X, Plus, Trash2, Target, List, Settings, Lock, ShieldAlert } from "lucide-react";
+import { X, Plus, Trash2, Target, List, Settings, ShieldAlert } from "lucide-react";
 
 /* ✅ inclui ACUM (mes=13) para configurar meta do acumulado também */
 const MESES = [
@@ -16,7 +16,7 @@ const MESES = [
   { id: 10, label: "Out" },
   { id: 11, label: "Nov" },
   { id: 12, label: "Dez" },
-  { id: 13, label: "Acum" }, // ✅ meta do acumulado
+  { id: 13, label: "Acum" },
 ];
 
 // ✅ UNID dropdown
@@ -32,6 +32,29 @@ const AREAS_PADRAO = [
   { id: 5, nome: "Gestão de Motoristas" },
 ];
 
+function parseNumberPtBr(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return 0;
+
+  let t = s.replace(/\s+/g, "");
+
+  if (t.includes(".") && t.includes(",")) {
+    t = t.replace(/\./g, "").replace(",", ".");
+  } else {
+    t = t.replace(",", ".");
+  }
+
+  t = t.replace(/[^0-9.\-]/g, "");
+
+  const idx = t.indexOf(".");
+  if (idx !== -1) {
+    t = t.slice(0, idx + 1) + t.slice(idx + 1).replace(/\./g, "");
+  }
+
+  const n = Number(t);
+  return Number.isFinite(n) ? n : 0;
+}
+
 const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
   const areasDisponiveis =
     areasContexto && areasContexto.length > 0 ? areasContexto : AREAS_PADRAO;
@@ -42,10 +65,37 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ✅ ESTADO DE PERMISSÃO
-  const [autorizado, setAutorizado] = useState(null); // null = verificando
+  const [autorizado, setAutorizado] = useState(null);
 
-  // 1. VERIFICA PERMISSÃO AO MONTAR
+  const totalPesos = useMemo(() => {
+    return items.reduce((acc, item) => acc + parseNumberPtBr(item.peso), 0);
+  }, [items]);
+
+  const faltandoPara100 = useMemo(() => {
+    return 100 - totalPesos;
+  }, [totalPesos]);
+
+  const statusPeso = useMemo(() => {
+    if (totalPesos === 100) {
+      return {
+        label: "Total de pesos: 100",
+        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      };
+    }
+
+    if (totalPesos < 100) {
+      return {
+        label: `Total de pesos: ${totalPesos} • Faltam ${faltandoPara100}`,
+        className: "bg-amber-50 text-amber-700 border-amber-200",
+      };
+    }
+
+    return {
+      label: `Total de pesos: ${totalPesos} • Excedeu ${Math.abs(faltandoPara100)}`,
+      className: "bg-red-50 text-red-700 border-red-200",
+    };
+  }, [totalPesos, faltandoPara100]);
+
   useEffect(() => {
     const verificarAcesso = () => {
       try {
@@ -57,7 +107,6 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
         const usuario = JSON.parse(stored);
         const nivel = String(usuario.nivel || "").trim();
 
-        // ✅ Regra: Apenas 'Administrador' ou 'Gestor'
         if (nivel === "Administrador" || nivel === "Gestor") {
           setAutorizado(true);
         } else {
@@ -71,7 +120,6 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
     verificarAcesso();
   }, []);
 
-  // 2. CARREGA DADOS (SÓ SE AUTORIZADO)
   useEffect(() => {
     if (autorizado) {
       fetchData();
@@ -90,7 +138,7 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
           .from("metas_farol")
           .select("*")
           .eq("area_id", areaId)
-          .order("id");
+          .order("peso", { ascending: false });
 
         if (errRows) throw errRows;
 
@@ -108,7 +156,7 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
           .from("rotinas_indicadores")
           .select("*")
           .eq("area_id", areaId)
-          .order("ordem");
+          .order("peso", { ascending: false });
 
         if (errRows) throw errRows;
 
@@ -123,18 +171,20 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
         dataMetas = values || [];
       }
 
-      const combined = dataItems.map((item) => {
-        const row = { ...item, valores_mensais: {} };
-        MESES.forEach((mes) => {
-          const fkId = item.id;
-          const fkColumn = tipo === "metas" ? "meta_id" : "rotina_id";
-          const found = dataMetas.find(
-            (v) => v[fkColumn] === fkId && v.mes === mes.id
-          );
-          row.valores_mensais[mes.id] = found ? found.valor_meta : "";
-        });
-        return row;
-      });
+      const combined = dataItems
+        .map((item) => {
+          const row = { ...item, valores_mensais: {} };
+          MESES.forEach((mes) => {
+            const fkId = item.id;
+            const fkColumn = tipo === "metas" ? "meta_id" : "rotina_id";
+            const found = dataMetas.find(
+              (v) => v[fkColumn] === fkId && v.mes === mes.id
+            );
+            row.valores_mensais[mes.id] = found ? found.valor_meta : "";
+          });
+          return row;
+        })
+        .sort((a, b) => parseNumberPtBr(b.peso) - parseNumberPtBr(a.peso));
 
       setItems(combined);
     } catch (error) {
@@ -156,7 +206,7 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
           indicador: nome,
           nome_meta: nome,
           peso: 0,
-          unidade: "", 
+          unidade: "",
           tipo_comparacao: ">=",
           responsavel: "",
         });
@@ -168,7 +218,7 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
           ordem: items.length + 1,
           tipo_comparacao: ">=",
           peso: 0,
-          unidade: "", 
+          unidade: "",
           responsavel: "",
         });
         if (error) throw error;
@@ -229,9 +279,19 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
       normalizedValue = String(value ?? "").trim().toLowerCase();
     }
 
-    setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: normalizedValue } : i))
-    );
+    setItems((prev) => {
+      const updated = prev.map((i) =>
+        i.id === id ? { ...i, [field]: normalizedValue } : i
+      );
+
+      if (field === "peso") {
+        return [...updated].sort(
+          (a, b) => parseNumberPtBr(b.peso) - parseNumberPtBr(a.peso)
+        );
+      }
+
+      return updated;
+    });
 
     try {
       const { error } = await supabase
@@ -331,11 +391,8 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
     }
   };
 
-  // -----------------------------------------------------------
-  // 🔒 RENDERIZAÇÃO CONDICIONAL DE ACESSO
-  // -----------------------------------------------------------
   if (autorizado === null) {
-    return null; // Carregando...
+    return null;
   }
 
   if (autorizado === false) {
@@ -360,16 +417,15 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
     );
   }
 
-  // ✅ CONTEÚDO NORMAL (SÓ RENDERIZA SE AUTORIZADO)
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4 backdrop-blur-sm font-sans">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col border border-gray-200">
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
               <Settings size={24} /> Configuração de Metas
             </h2>
+
             <div className="flex bg-gray-200 rounded-lg p-1">
               <button
                 onClick={() => setTipo("metas")}
@@ -387,6 +443,12 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
               >
                 <List size={16} /> Rotinas
               </button>
+            </div>
+
+            <div
+              className={`px-3 py-2 rounded-lg border text-sm font-bold ${statusPeso.className}`}
+            >
+              {statusPeso.label}
             </div>
           </div>
 
@@ -413,7 +475,6 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
           </div>
         </div>
 
-        {/* Tabela de Edição */}
         <div className="flex-1 overflow-auto p-6 bg-gray-50/50">
           {loading ? (
             <div className="text-center py-20 text-gray-400">Carregando dados...</div>
@@ -460,9 +521,10 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
                       <td className="p-1 border-r">
                         <input
                           type="number"
+                          step="0.01"
                           value={item.peso ?? 0}
                           onChange={(e) => updateRowProp(item.id, "peso", e.target.value)}
-                          className="w-full text-center bg-transparent"
+                          className="w-full text-center bg-transparent font-bold"
                         />
                       </td>
 
@@ -523,6 +585,20 @@ const ConfiguracaoGeral = ({ onClose, areasContexto }) => {
                     </tr>
                   ))}
                 </tbody>
+
+                <tfoot>
+                  <tr className="bg-slate-900 text-white font-bold">
+                    <td className="p-3 border-r">TOTAL DE PESOS</td>
+                    <td className="p-3 text-center border-r">{totalPesos}</td>
+                    <td className="p-3 border-r"></td>
+                    <td className="p-3 border-r"></td>
+                    <td className="p-3 border-r"></td>
+                    {MESES.map((mes) => (
+                      <td key={mes.id} className="p-3 border-r"></td>
+                    ))}
+                    <td className="p-3"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
