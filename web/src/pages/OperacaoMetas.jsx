@@ -37,8 +37,8 @@ const MESES = [
   { id: 10, label: "out/26" },
   { id: 11, label: "nov/26" },
   { id: 12, label: "dez/26" },
-  { id: 13, label: "acum/26" }, // ✅ tem alvo/meta azul + realizado
-  { id: 14, label: "média 25" }, // ✅ só realizado (manual), sem meta azul, sem score
+  { id: 13, label: "acum/26" },
+  { id: 14, label: "média 25" },
 ];
 
 function normBoolLabel(v) {
@@ -69,18 +69,14 @@ function parseNumberPtBr(raw) {
 
   let t = s.replace(/\s+/g, "");
 
-  // "." e "," juntos -> BR: "." milhar, "," decimal
   if (t.includes(".") && t.includes(",")) {
     t = t.replace(/\./g, "").replace(",", ".");
   } else {
-    // só "," -> decimal
     t = t.replace(",", ".");
   }
 
-  // remove lixo
   t = t.replace(/[^0-9.\-]/g, "");
 
-  // remove pontos extras
   const idx = t.indexOf(".");
   if (idx !== -1) {
     t = t.slice(0, idx + 1) + t.slice(idx + 1).replace(/\./g, "");
@@ -100,13 +96,11 @@ const OperacaoMetas = () => {
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
 
-  // Carrega as áreas ao abrir a tela
   useEffect(() => {
     fetchAreas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Recarrega as metas sempre que mudar a área
   useEffect(() => {
     if (areaSelecionada) fetchMetasData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,7 +118,7 @@ const OperacaoMetas = () => {
 
       if (data && data.length > 0) {
         const areasFiltradas = data.filter(
-          (a) => a.id == ID_PCO || a.id == ID_MOTORISTAS
+          (a) => a.id === ID_PCO || a.id === ID_MOTORISTAS
         );
         if (areasFiltradas.length > 0) {
           setAreas(areasFiltradas);
@@ -141,7 +135,6 @@ const OperacaoMetas = () => {
     }
   };
 
-  // ✅ Fonte da verdade do binário: metas_farol.unidade
   const isBinaryMeta = (metaRow) => {
     const unidade = String(metaRow?.unidade ?? "").trim().toLowerCase();
     if (unidade === "binario" || unidade === "binário" || unidade === "boolean")
@@ -152,16 +145,14 @@ const OperacaoMetas = () => {
   const fetchMetasData = async () => {
     setLoading(true);
     try {
-      // 1) Definições das Metas (Linhas)
       const { data: metasDef, error: err1 } = await supabase
         .from("metas_farol")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("id");
+        .order("peso", { ascending: false });
 
       if (err1) throw err1;
 
-      // 2) Metas Mensais (Alvos) — não existe alvo para mes=14 (média 25)
       const { data: metasMensais, error: err2 } = await supabase
         .from("metas_farol_mensal")
         .select("*")
@@ -169,7 +160,6 @@ const OperacaoMetas = () => {
 
       if (err2) throw err2;
 
-      // 3) Resultados Realizados (inclui mes=13 e mes=14)
       const { data: resultados, error: err3 } = await supabase
         .from("resultados_farol")
         .select("*")
@@ -177,71 +167,71 @@ const OperacaoMetas = () => {
 
       if (err3) throw err3;
 
-      // 4) Cruzamento
-      const combined = (metasDef || []).map((m) => {
-        const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
+      const combined = (metasDef || [])
+        .map((m) => {
+          const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
 
-        MESES.forEach((mes) => {
-          const realObj = resultados?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
+          MESES.forEach((mes) => {
+            const realObj = resultados?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
 
-          // ✅ Realizado: numérico OU binário (1/0)
-          let real = "";
-          if (
-            realObj &&
-            realObj.valor_realizado !== null &&
-            realObj.valor_realizado !== ""
-          ) {
-            const parsed = parseNumberPtBr(realObj.valor_realizado); // ✅ aqui
-            real = parsed === null ? "" : parsed;
-          }
+            let real = "";
+            if (
+              realObj &&
+              realObj.valor_realizado !== null &&
+              realObj.valor_realizado !== ""
+            ) {
+              const parsed = parseNumberPtBr(realObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          // ✅ MÉDIA 25 (mes=14): só realizado, SEM alvo/meta azul e SEM score
-          if (mes.id === 14) {
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            const alvoObj = metasMensais?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
+
+            let alvo = null;
+            if (
+              alvoObj &&
+              alvoObj.valor_meta !== null &&
+              alvoObj.valor_meta !== ""
+            ) {
+              const parsed = parseNumberPtBr(alvoObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                m.tipo_comparacao,
+                parseNumberPtBr(m.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          const alvoObj = metasMensais?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
-
-          // ✅ Alvo: numérico (inclusive 0) OU binário (1/0)
-          let alvo = null;
-          if (
-            alvoObj &&
-            alvoObj.valor_meta !== null &&
-            alvoObj.valor_meta !== ""
-          ) {
-            const parsed = parseNumberPtBr(alvoObj.valor_meta); // ✅ aqui
-            alvo = parsed === null ? null : parsed;
-          }
-
-          // ✅ Para binário, se alvo vier null, assume meta "Sim" (1)
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              m.tipo_comparacao,
-              parseNumberPtBr(m.peso) ?? 0, // ✅ mais seguro
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setMetas(combined);
     } catch (error) {
@@ -251,7 +241,6 @@ const OperacaoMetas = () => {
     }
   };
 
-  // ✅ Cálculo (numérico + binário)
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
     if (isBinary) {
       const m = meta === null || meta === undefined ? 1 : Number(meta);
@@ -356,17 +345,15 @@ const OperacaoMetas = () => {
     if (isBinary) {
       valorNum = boolToNum(valor);
     } else {
-      valorNum = parseNumberPtBr(valor); // ✅ aceita vírgula/ponto em TODOS (inclui mês 14)
+      valorNum = parseNumberPtBr(valor);
     }
 
-    // Atualiza UI
     setMetas((prev) =>
       prev.map((m) => {
         if (m.id !== metaId) return m;
         const novoMeses = { ...m.meses };
         const alvoAtual = novoMeses[mesId]?.alvo ?? null;
 
-        // ✅ mes=14 (média 25): não recalcula score, não usa alvo
         if (mesId === 14) {
           novoMeses[mesId] = {
             ...novoMeses[mesId],
@@ -385,7 +372,7 @@ const OperacaoMetas = () => {
             alvoAtual,
             valorNum,
             m.tipo_comparacao,
-            Number(m.peso),
+            parseNumberPtBr(m.peso) ?? 0,
             m._isBinary
           ),
         };
@@ -394,14 +381,13 @@ const OperacaoMetas = () => {
       })
     );
 
-    // Salva no banco (null apaga valor)
     const { error } = await supabase
       .from("resultados_farol")
       .upsert(
         {
           meta_id: metaId,
           ano: 2026,
-          mes: mesId, // ✅ inclui 14 (média 25)
+          mes: mesId,
           valor_realizado: valorNum,
         },
         { onConflict: "meta_id, ano, mes" }
@@ -411,11 +397,11 @@ const OperacaoMetas = () => {
   };
 
   const totalPeso = useMemo(() => {
-    return metas.reduce((acc, m) => acc + (Number(m.peso) || 0), 0);
+    return metas.reduce((acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0), 0);
   }, [metas]);
 
   const getTotalScore = (mesId) => {
-    if (mesId === 14) return "-"; // ✅ Média 25 não entra no score
+    if (mesId === 14) return "-";
     const total = metas.reduce(
       (acc, m) => acc + (m.meses[mesId]?.score || 0),
       0
@@ -457,14 +443,12 @@ const OperacaoMetas = () => {
 
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-800">
             Farol de Metas — Operação
           </h2>
 
-          {/* Baixar Farol */}
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -496,7 +480,6 @@ const OperacaoMetas = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Config */}
           <div className="flex items-center gap-2 mr-4 pr-4">
             <button
               onClick={() => setShowConfig(true)}
@@ -507,7 +490,6 @@ const OperacaoMetas = () => {
             </button>
           </div>
 
-          {/* Seletor de Áreas */}
           <div className="flex space-x-2">
             {areas.map((area) => (
               <button
@@ -526,7 +508,6 @@ const OperacaoMetas = () => {
         </div>
       </div>
 
-      {/* Tabela */}
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500 animate-pulse">
@@ -543,10 +524,7 @@ const OperacaoMetas = () => {
                   <th className="p-2 border border-gray-300 w-48 sticky left-0 bg-[#d0e0e3] z-10">
                     Indicador
                   </th>
-
-                  {/* ✅ UNID agora é SOMENTE LEITURA */}
                   <th className="p-2 border border-gray-300 w-20">UNID.</th>
-
                   <th className="p-2 border border-gray-300 w-32">
                     Responsável
                   </th>
@@ -567,12 +545,10 @@ const OperacaoMetas = () => {
               <tbody>
                 {metas.map((meta) => (
                   <tr key={meta.id} className="hover:bg-gray-50 text-center">
-                    {/* Indicador */}
                     <td className="p-2 border border-gray-300 text-left font-semibold text-gray-800 text-sm sticky left-0 bg-white z-10">
                       {meta.nome_meta || meta.indicador}
                     </td>
 
-                    {/* ✅ UNID somente leitura */}
                     <td className="p-2 border border-gray-300">
                       <div className="text-[11px] font-semibold text-gray-700">
                         {getUnidadeLabel(meta.unidade) || "-"}
@@ -582,13 +558,12 @@ const OperacaoMetas = () => {
                       </div>
                     </td>
 
-                    {/* Responsável */}
                     <td className="p-2 border border-gray-300 text-left text-[11px] text-gray-700">
                       {meta.responsavel || "-"}
                     </td>
 
                     <td className="p-2 border border-gray-300 bg-gray-50">
-                      {parseInt(meta.peso)}
+                      {parseInt(parseNumberPtBr(meta.peso) ?? 0, 10)}
                     </td>
 
                     <td className="p-2 border border-gray-300 font-mono text-gray-500">
@@ -598,7 +573,6 @@ const OperacaoMetas = () => {
                     {MESES.map((mes) => {
                       const dados = meta.meses[mes.id];
 
-                      // ✅ MÉDIA 25 (mes=14): input numérico normal (uncontrolled) + parse só no blur
                       if (mes.id === 14) {
                         const valorRealizado =
                           dados?.realizado === null ||
@@ -632,7 +606,6 @@ const OperacaoMetas = () => {
                         );
                       }
 
-                      // ✅ Binário: select Sim/Não gravando 1/0
                       if (meta._isBinary) {
                         const alvoLabel = numToBoolLabel(dados.alvo ?? 1);
                         const realLabel = numToBoolLabel(dados.realizado);
@@ -640,7 +613,9 @@ const OperacaoMetas = () => {
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color}`}
+                            className={`border border-gray-300 p-0 relative h-12 align-middle ${
+                              dados.color || "bg-white"
+                            }`}
                           >
                             <div className="flex flex-col h-full justify-between">
                               <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
@@ -668,7 +643,6 @@ const OperacaoMetas = () => {
                         );
                       }
 
-                      // ✅ Numérico: input normal (agora aceita vírgula/ponto)
                       const valorRealizado =
                         dados?.realizado === null ||
                         dados?.realizado === "" ||
@@ -679,7 +653,9 @@ const OperacaoMetas = () => {
                       return (
                         <td
                           key={mes.id}
-                          className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color}`}
+                          className={`border border-gray-300 p-0 relative h-12 align-middle ${
+                            dados.color || "bg-white"
+                          }`}
                         >
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
@@ -714,24 +690,15 @@ const OperacaoMetas = () => {
                   </tr>
                 ))}
 
-                {/* TOTAL SCORE */}
                 <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
                   <td className="p-2 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
                     TOTAL SCORE
                   </td>
-
-                  {/* ✅ UNID vazio */}
                   <td className="p-2 border-r border-red-500"></td>
-
-                  {/* Responsável vazio */}
                   <td className="p-2 border-r border-red-500"></td>
-
-                  {/* ✅ soma real dos pesos */}
                   <td className="p-2 border-r border-red-500 text-center">
                     {Number(totalPeso || 0).toFixed(0)}
                   </td>
-
-                  {/* Tipo vazio */}
                   <td className="p-2 border-r border-red-500"></td>
 
                   {MESES.map((mes) => (
@@ -751,6 +718,7 @@ const OperacaoMetas = () => {
 
       {showConfig && (
         <ConfiguracaoGeral
+          areasContexto={areas}
           onClose={() => {
             setShowConfig(false);
             fetchMetasData();
