@@ -1,4 +1,3 @@
-// src/pages/AdministrativoMetas.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
@@ -149,7 +148,7 @@ const AdministrativoMetas = () => {
         .from("metas_farol")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("id");
+        .order("peso", { ascending: false });
       if (err1) throw err1;
 
       const { data: metasMensais, error: err2 } = await supabase
@@ -164,68 +163,73 @@ const AdministrativoMetas = () => {
         .eq("ano", 2026);
       if (err3) throw err3;
 
-      const combined = (metasDef || []).map((m) => {
-        const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
+      const combined = (metasDef || [])
+        .map((m) => {
+          const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
 
-        MESES.forEach((mes) => {
-          const realObj = resultados?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
+          MESES.forEach((mes) => {
+            const realObj = resultados?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
 
-          let real = "";
-          if (
-            realObj &&
-            realObj.valor_realizado !== null &&
-            realObj.valor_realizado !== ""
-          ) {
-            const parsed = parseNumberPtBr(realObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            let real = "";
+            if (
+              realObj &&
+              realObj.valor_realizado !== null &&
+              realObj.valor_realizado !== ""
+            ) {
+              const parsed = parseNumberPtBr(realObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          // ✅ MÉDIA 25 (mes=14): só realizado, SEM alvo/meta azul e SEM score
-          if (mes.id === 14) {
+            // ✅ MÉDIA 25 (mes=14): só realizado, SEM alvo/meta azul e SEM score
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            const alvoObj = metasMensais?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
+
+            let alvo = null;
+            if (
+              alvoObj &&
+              alvoObj.valor_meta !== null &&
+              alvoObj.valor_meta !== ""
+            ) {
+              const parsed = parseNumberPtBr(alvoObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            // ✅ Para binário, se alvo vier null, assume meta "Sim" (1)
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                m.tipo_comparacao,
+                parseNumberPtBr(m.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          const alvoObj = metasMensais?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
-
-          let alvo = null;
-          if (
-            alvoObj &&
-            alvoObj.valor_meta !== null &&
-            alvoObj.valor_meta !== ""
-          ) {
-            const parsed = parseNumberPtBr(alvoObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          // ✅ Para binário, se alvo vier null, assume meta "Sim" (1)
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              m.tipo_comparacao,
-              parseNumberPtBr(m.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setMetas(combined);
     } catch (e) {
@@ -559,7 +563,7 @@ const AdministrativoMetas = () => {
                       {meta.responsavel || "-"}
                     </td>
 
-                    <td className="p-2 bg-gray-50">{parseInt(parseNumberPtBr(meta.peso) ?? 0)}</td>
+                    <td className="p-2 bg-gray-50">{parseInt(parseNumberPtBr(meta.peso) ?? 0, 10)}</td>
 
                     <td className="p-2 font-mono text-gray-500">
                       {meta.tipo_comparacao}
@@ -608,7 +612,7 @@ const AdministrativoMetas = () => {
                         return (
                           <td
                             key={mes.id}
-                            className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color}`}
+                            className={`border border-gray-300 p-0 relative h-12 align-middle ${dados.color || "bg-white"}`}
                           >
                             <div className="flex flex-col h-full justify-between">
                               <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
@@ -641,7 +645,7 @@ const AdministrativoMetas = () => {
                       return (
                         <td
                           key={mes.id}
-                          className={`border p-0 ${dados.color}`}
+                          className={`border p-0 ${dados.color || "bg-white"}`}
                         >
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
