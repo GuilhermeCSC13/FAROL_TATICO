@@ -36,8 +36,8 @@ const MESES = [
   { id: 10, label: "out/26" },
   { id: 11, label: "nov/26" },
   { id: 12, label: "dez/26" },
-  { id: 13, label: "acum/26" }, // ✅ tem alvo/meta azul + realizado
-  { id: 14, label: "média 25" }, // ✅ só realizado (manual), sem meta azul, sem score
+  { id: 13, label: "acum/26" },
+  { id: 14, label: "média 25" },
 ];
 
 function normBoolLabel(v) {
@@ -68,18 +68,14 @@ function parseNumberPtBr(raw) {
 
   let t = s.replace(/\s+/g, "");
 
-  // "." e "," juntos -> BR: "." milhar, "," decimal
   if (t.includes(".") && t.includes(",")) {
     t = t.replace(/\./g, "").replace(",", ".");
   } else {
-    // só "," -> decimal
     t = t.replace(",", ".");
   }
 
-  // remove lixo
   t = t.replace(/[^0-9.\-]/g, "");
 
-  // remove pontos extras
   const idx = t.indexOf(".");
   if (idx !== -1) {
     t = t.slice(0, idx + 1) + t.slice(idx + 1).replace(/\./g, "");
@@ -96,10 +92,7 @@ const MoovRotinas = () => {
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
-  // ✅ filtro por responsável (padrão)
   const [responsavelFiltro, setResponsavelFiltro] = useState("");
-
-  // ✅ Export (igual padrão)
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
 
@@ -124,7 +117,7 @@ const MoovRotinas = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const filtered = data.filter((a) => a.id == ID_MOOV);
+        const filtered = data.filter((a) => a.id === ID_MOOV);
         const lista = filtered.length > 0 ? filtered : data;
         setAreas(lista);
         setAreaSelecionada(lista[0].id);
@@ -136,14 +129,12 @@ const MoovRotinas = () => {
     }
   };
 
-  // ✅ Fonte da verdade do binário: rotinas_indicadores.unidade
   const isBinaryRotina = (row) => {
     const unidade = String(row?.unidade ?? "").trim().toLowerCase();
     if (unidade === "binario" || unidade === "binário" || unidade === "boolean") return true;
     return false;
   };
 
-  // ✅ Cálculo (numérico + binário) — idêntico ao padrão
   const calculateScore = (meta, realizado, tipo, pesoTotal, isBinary) => {
     const peso = Number(pesoTotal) || 0;
 
@@ -171,7 +162,6 @@ const MoovRotinas = () => {
     const r = parseFloat(realizado);
     const m = parseFloat(meta);
 
-    // ✅ meta = 0 (blindado)
     if (m === 0) {
       let multiplicador = 0;
       let cor = "bg-red-200";
@@ -231,7 +221,7 @@ const MoovRotinas = () => {
         .from("rotinas_indicadores")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("ordem", { ascending: true });
+        .order("peso", { ascending: false });
 
       if (defsErr) throw defsErr;
 
@@ -242,55 +232,57 @@ const MoovRotinas = () => {
 
       if (valsErr) throw valsErr;
 
-      const combined = (defs || []).map((r) => {
-        const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
+      const combined = (defs || [])
+        .map((r) => {
+          const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
 
-        MESES.forEach((mes) => {
-          const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
+          MESES.forEach((mes) => {
+            const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
 
-          // ✅ realizado
-          let real = "";
-          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            let real = "";
+            if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          // ✅ mes=14 (manual): sem meta azul e sem score
-          if (mes.id === 14) {
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            let alvo = null;
+            if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                r.tipo_comparacao,
+                parseNumberPtBr(r.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          // ✅ meta/alvo
-          let alvo = null;
-          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              r.tipo_comparacao,
-              parseNumberPtBr(r.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setRotinas(combined);
     } catch (e) {
@@ -307,7 +299,6 @@ const MoovRotinas = () => {
     if (isBinary) valorNum = boolToNum(valor);
     else valorNum = parseNumberPtBr(valor);
 
-    // Atualiza UI (padrão)
     setRotinas((prev) =>
       prev.map((r) => {
         if (r.id !== rotinaId) return r;
@@ -315,7 +306,6 @@ const MoovRotinas = () => {
         const novoMeses = { ...r.meses };
         const alvoAtual = novoMeses[mesId]?.alvo ?? null;
 
-        // ✅ mes=14: sem score
         if (mesId === 14) {
           novoMeses[mesId] = {
             ...novoMeses[mesId],
@@ -343,13 +333,12 @@ const MoovRotinas = () => {
       })
     );
 
-    // ✅✅✅ Salva no banco (UPSERT) — cria a linha se não existir
     try {
       const payload = {
         rotina_id: rotinaId,
         ano: 2026,
         mes: mesId,
-        valor_realizado: valorNum, // null apaga
+        valor_realizado: valorNum,
       };
 
       const { error } = await supabase
@@ -362,7 +351,6 @@ const MoovRotinas = () => {
     }
   };
 
-  // responsáveis únicos para o filtro
   const responsaveisUnicos = useMemo(() => {
     return Array.from(
       new Set(
@@ -374,7 +362,14 @@ const MoovRotinas = () => {
   }, [rotinas]);
 
   const rotinasFiltradas = useMemo(() => {
-    return responsavelFiltro ? rotinas.filter((r) => r.responsavel === responsavelFiltro) : rotinas;
+    const base = responsavelFiltro
+      ? rotinas.filter((r) => r.responsavel === responsavelFiltro)
+      : rotinas;
+
+    return [...base].sort(
+      (a, b) =>
+        (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+    );
   }, [rotinas, responsavelFiltro]);
 
   const totalPeso = useMemo(() => {
@@ -417,12 +412,10 @@ const MoovRotinas = () => {
 
   return (
     <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      {/* Cabeçalho (padrão) */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-800">Farol de Rotinas — Moov</h2>
 
-          {/* Baixar Farol */}
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -452,7 +445,6 @@ const MoovRotinas = () => {
             )}
           </div>
 
-          {/* Filtro de Responsável */}
           <div className="flex items-center gap-2 ml-2">
             <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
             <select
@@ -471,7 +463,6 @@ const MoovRotinas = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Config */}
           <div className="flex items-center gap-2 mr-2">
             <button
               onClick={() => setShowConfig(true)}
@@ -482,7 +473,6 @@ const MoovRotinas = () => {
             </button>
           </div>
 
-          {/* Seletor de Área (Moov) */}
           <div className="flex space-x-2">
             {areas.map((area) => (
               <button
@@ -501,7 +491,6 @@ const MoovRotinas = () => {
         </div>
       </div>
 
-      {/* Tabela */}
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados...</div>
@@ -565,7 +554,6 @@ const MoovRotinas = () => {
                       {MESES.map((mes) => {
                         const dados = row.meses[mes.id];
 
-                        // ✅ MÉDIA 25 (mes=14) — só realizado, sem score
                         if (mes.id === 14) {
                           const valorRealizado =
                             dados?.realizado === null ||
@@ -593,7 +581,6 @@ const MoovRotinas = () => {
                           );
                         }
 
-                        // ✅ Binário
                         if (row._isBinary) {
                           const alvoLabel = numToBoolLabel(dados?.alvo ?? 1);
                           const realLabel = numToBoolLabel(dados?.realizado);
@@ -624,7 +611,6 @@ const MoovRotinas = () => {
                           );
                         }
 
-                        // ✅ Numérico
                         const valorRealizado =
                           dados?.realizado === null ||
                           dados?.realizado === "" ||
@@ -661,7 +647,6 @@ const MoovRotinas = () => {
                     </tr>
                   ))}
 
-                  {/* TOTAL SCORE */}
                   <tr className="bg-red-600 text-white font-bold border-t-2 border-black">
                     <td className="px-2 py-1 sticky left-0 bg-red-600 z-10 border-r border-red-500 text-right pr-4">
                       TOTAL SCORE
