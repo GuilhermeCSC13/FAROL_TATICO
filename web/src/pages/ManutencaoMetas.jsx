@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
@@ -203,7 +203,7 @@ const ManutencaoMetas = () => {
         .from("metas_farol")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("id");
+        .order("peso", { ascending: false });
 
       if (err1) throw err1;
 
@@ -221,66 +221,71 @@ const ManutencaoMetas = () => {
 
       if (err3) throw err3;
 
-      const combined = (metasDef || []).map((m) => {
-        const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
+      const combined = (metasDef || [])
+        .map((m) => {
+          const row = { ...m, meses: {}, _isBinary: isBinaryMeta(m) };
 
-        MESES.forEach((mes) => {
-          const realObj = resultados?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
+          MESES.forEach((mes) => {
+            const realObj = resultados?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
 
-          let real = "";
-          if (
-            realObj &&
-            realObj.valor_realizado !== null &&
-            realObj.valor_realizado !== ""
-          ) {
-            const parsed = parseNumberPtBr(realObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            let real = "";
+            if (
+              realObj &&
+              realObj.valor_realizado !== null &&
+              realObj.valor_realizado !== ""
+            ) {
+              const parsed = parseNumberPtBr(realObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          if (mes.id === 14) {
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            const alvoObj = metasMensais?.find(
+              (x) => x.meta_id === m.id && x.mes === mes.id
+            );
+
+            let alvo = null;
+            if (
+              alvoObj &&
+              alvoObj.valor_meta !== null &&
+              alvoObj.valor_meta !== ""
+            ) {
+              const parsed = parseNumberPtBr(alvoObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                m.tipo_comparacao,
+                parseNumberPtBr(m.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          const alvoObj = metasMensais?.find(
-            (x) => x.meta_id === m.id && x.mes === mes.id
-          );
-
-          let alvo = null;
-          if (
-            alvoObj &&
-            alvoObj.valor_meta !== null &&
-            alvoObj.valor_meta !== ""
-          ) {
-            const parsed = parseNumberPtBr(alvoObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              m.tipo_comparacao,
-              parseNumberPtBr(m.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setMetas(combined);
     } catch (error) {
