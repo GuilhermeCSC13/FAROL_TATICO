@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
@@ -234,7 +234,7 @@ const ManutencaoRotinas = () => {
         .from("rotinas_indicadores")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("ordem", { ascending: true });
+        .order("peso", { ascending: false });
 
       if (defsErr) throw defsErr;
 
@@ -245,62 +245,67 @@ const ManutencaoRotinas = () => {
 
       if (valsErr) throw valsErr;
 
-      const combined = (defs || []).map((r) => {
-        const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
+      const combined = (defs || [])
+        .map((r) => {
+          const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
 
-        MESES.forEach((mes) => {
-          const valObj = valores?.find(
-            (v) => v.rotina_id === r.id && v.mes === mes.id
-          );
+          MESES.forEach((mes) => {
+            const valObj = valores?.find(
+              (v) => v.rotina_id === r.id && v.mes === mes.id
+            );
 
-          let real = "";
-          if (
-            valObj &&
-            valObj.valor_realizado !== null &&
-            valObj.valor_realizado !== ""
-          ) {
-            const parsed = parseNumberPtBr(valObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            let real = "";
+            if (
+              valObj &&
+              valObj.valor_realizado !== null &&
+              valObj.valor_realizado !== ""
+            ) {
+              const parsed = parseNumberPtBr(valObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          if (mes.id === 14) {
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            let alvo = null;
+            if (
+              valObj &&
+              valObj.valor_meta !== null &&
+              valObj.valor_meta !== ""
+            ) {
+              const parsed = parseNumberPtBr(valObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                r.tipo_comparacao,
+                parseNumberPtBr(r.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          let alvo = null;
-          if (
-            valObj &&
-            valObj.valor_meta !== null &&
-            valObj.valor_meta !== ""
-          ) {
-            const parsed = parseNumberPtBr(valObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              r.tipo_comparacao,
-              parseNumberPtBr(r.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setRotinas(combined);
     } catch (e) {
@@ -379,9 +384,14 @@ const ManutencaoRotinas = () => {
   }, [rotinas]);
 
   const rotinasFiltradas = useMemo(() => {
-    return responsavelFiltro
+    const base = responsavelFiltro
       ? rotinas.filter((r) => r.responsavel === responsavelFiltro)
       : rotinas;
+
+    return [...base].sort(
+      (a, b) =>
+        (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+    );
   }, [rotinas, responsavelFiltro]);
 
   const totalPeso = useMemo(() => {
