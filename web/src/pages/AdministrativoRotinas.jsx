@@ -233,7 +233,7 @@ const AdministrativoRotinas = () => {
         .from("rotinas_indicadores")
         .select("*")
         .eq("area_id", areaSelecionada)
-        .order("ordem", { ascending: true });
+        .order("peso", { ascending: false });
 
       if (defsErr) throw defsErr;
 
@@ -246,55 +246,60 @@ const AdministrativoRotinas = () => {
       if (valsErr) throw valsErr;
 
       // 3) Cruzamento (padrão)
-      const combined = (defs || []).map((r) => {
-        const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
+      const combined = (defs || [])
+        .map((r) => {
+          const row = { ...r, meses: {}, _isBinary: isBinaryRotina(r) };
 
-        MESES.forEach((mes) => {
-          const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
+          MESES.forEach((mes) => {
+            const valObj = valores?.find((v) => v.rotina_id === r.id && v.mes === mes.id);
 
-          // ✅ realizado
-          let real = "";
-          if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_realizado);
-            real = parsed === null ? "" : parsed;
-          }
+            // ✅ realizado
+            let real = "";
+            if (valObj && valObj.valor_realizado !== null && valObj.valor_realizado !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_realizado);
+              real = parsed === null ? "" : parsed;
+            }
 
-          // ✅ mes=14 (manual): sem meta azul e sem score
-          if (mes.id === 14) {
+            // ✅ mes=14 (manual): sem meta azul e sem score
+            if (mes.id === 14) {
+              row.meses[mes.id] = {
+                alvo: null,
+                realizado: real,
+                score: 0,
+                multiplicador: 0,
+                color: "bg-white",
+              };
+              return;
+            }
+
+            // ✅ meta/alvo
+            let alvo = null;
+            if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
+              const parsed = parseNumberPtBr(valObj.valor_meta);
+              alvo = parsed === null ? null : parsed;
+            }
+
+            const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
+
             row.meses[mes.id] = {
-              alvo: null,
+              alvo: alvoEfetivo,
               realizado: real,
-              score: 0,
-              multiplicador: 0,
-              color: "bg-white",
+              ...calculateScore(
+                alvoEfetivo,
+                real,
+                r.tipo_comparacao,
+                parseNumberPtBr(r.peso) ?? 0,
+                row._isBinary
+              ),
             };
-            return;
-          }
+          });
 
-          // ✅ meta/alvo
-          let alvo = null;
-          if (valObj && valObj.valor_meta !== null && valObj.valor_meta !== "") {
-            const parsed = parseNumberPtBr(valObj.valor_meta);
-            alvo = parsed === null ? null : parsed;
-          }
-
-          const alvoEfetivo = row._isBinary ? (alvo === null ? 1 : alvo) : alvo;
-
-          row.meses[mes.id] = {
-            alvo: alvoEfetivo,
-            realizado: real,
-            ...calculateScore(
-              alvoEfetivo,
-              real,
-              r.tipo_comparacao,
-              parseNumberPtBr(r.peso) ?? 0,
-              row._isBinary
-            ),
-          };
-        });
-
-        return row;
-      });
+          return row;
+        })
+        .sort(
+          (a, b) =>
+            (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+        );
 
       setRotinas(combined);
     } catch (e) {
@@ -380,7 +385,14 @@ const AdministrativoRotinas = () => {
   }, [rotinas]);
 
   const rotinasFiltradas = useMemo(() => {
-    return responsavelFiltro ? rotinas.filter((r) => r.responsavel === responsavelFiltro) : rotinas;
+    const base = responsavelFiltro
+      ? rotinas.filter((r) => r.responsavel === responsavelFiltro)
+      : rotinas;
+
+    return [...base].sort(
+      (a, b) =>
+        (parseNumberPtBr(b.peso) ?? 0) - (parseNumberPtBr(a.peso) ?? 0)
+    );
   }, [rotinas, responsavelFiltro]);
 
   const totalPeso = useMemo(() => {
