@@ -34,6 +34,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useRecording } from "../context/RecordingContext";
 import ModalDetalhesAcao from "../components/tatico/ModalDetalhesAcao";
+import PrettyDatePicker from "../components/tatico/PrettyDatePicker";
 
 /* =========================
    Helpers
@@ -975,16 +976,12 @@ export default function Copiloto() {
           </div>
 
           <div className="flex gap-2 mb-3">
-            <div className="relative flex-1 group">
-              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 transition-colors group-focus-within:text-blue-600" />
-              <input
-                type="date"
-                autoComplete="off"
-                className="w-full bg-gradient-to-br from-white to-blue-50/60 border border-slate-200 hover:border-blue-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm outline-none transition focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-                value={dataFiltro}
-                onChange={(e) => setDataFiltro(e.target.value)}
-              />
-            </div>
+            <PrettyDatePicker
+              className="flex-1"
+              value={dataFiltro}
+              onChange={(v) => setDataFiltro(v)}
+              placeholder="Data"
+            />
 
             <div className="relative flex-1 group">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" />
