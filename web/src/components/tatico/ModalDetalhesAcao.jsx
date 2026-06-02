@@ -704,7 +704,7 @@ const ModalDetalhesAcao = ({
               onChange={(e) => setDescricaoAcao(e.target.value)}
               disabled={inputsDesabilitados}
               placeholder="Digite o nome da ação..."
-              className="w-full text-sm sm:text-base font-semibold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none transition-colors pb-1 disabled:opacity-80 disabled:hover:border-transparent"
+              className="w-full text-sm sm:text-base font-semibold text-gray-800 bg-blue-50/40 border border-slate-200 hover:border-blue-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all rounded-lg px-3 py-2 disabled:opacity-80"
             />
           </div>
           <button
