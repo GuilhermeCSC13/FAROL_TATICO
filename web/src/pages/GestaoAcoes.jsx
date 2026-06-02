@@ -305,10 +305,25 @@ const GestaoAcoes = () => {
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 flex items-center gap-2">
               <AlertCircle size={16} /> Clique em <b>Lista</b> para ver suas ações, ou clique no seu nome abaixo.
             </div>
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <AlertCircle className="text-red-500" size={20} />
-              Desempenho por Responsável
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <AlertCircle className="text-red-500" size={20} />
+                Desempenho por Responsável
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltroResponsavel('Todos');
+                  setFiltroStatus('Todas');
+                  setFiltroTexto('');
+                  setFiltroOrigem('Todas');
+                  setViewMode('lista');
+                }}
+                className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-4 py-2 rounded-lg font-black text-xs tracking-wide shadow-sm active:scale-95 transition-all flex items-center gap-2"
+              >
+                <List size={14} /> VER TODOS
+              </button>
+            </div>
             
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">

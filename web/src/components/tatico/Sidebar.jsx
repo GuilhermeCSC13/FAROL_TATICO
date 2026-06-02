@@ -342,9 +342,18 @@ export default function Sidebar() {
       <div className="px-3 py-3 border-t border-blue-500/40">
         <button
           type="button"
-          onClick={() =>
-            window.location.replace("https://inovequatai.onrender.com/")
-          }
+          onClick={() => {
+            // Se estiver embarcado dentro do Inove (iframe), pede pro pai trocar de aba.
+            if (window.parent && window.parent !== window) {
+              try {
+                window.parent.postMessage({ type: "farol:switch-to-inove" }, "*");
+                return;
+              } catch {
+                /* fallback abaixo */
+              }
+            }
+            window.location.replace("https://inovequatai.onrender.com/");
+          }}
           className="w-full bg-white text-blue-900 px-4 py-2 rounded-lg font-bold hover:bg-blue-50 transition-all shadow-sm text-sm"
           title="Voltar para o INOVE"
         >
