@@ -314,7 +314,7 @@ const ManutencaoResumo = () => {
           <select
             value={mesSelecionado}
             onChange={(e) => setMesSelecionado(Number(e.target.value))}
-            className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             {MESES.map((m) => (
               <option key={m.id} value={m.id}>
@@ -325,7 +325,7 @@ const ManutencaoResumo = () => {
 
           <button
             onClick={() => setShowConfig(true)}
-            className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-gray-700 transition-colors shadow-sm"
+            className="flex h-9 items-center gap-2 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white shadow-sm transition-colors hover:bg-slate-700"
           >
             <Settings size={16} /> Configurar Metas e Rotinas
           </button>
@@ -352,10 +352,10 @@ const ManutencaoResumo = () => {
                   Score Global
                 </p>
                 <h3 className="text-2xl font-bold text-gray-800">
-                  {metrics.scoreAtual.toFixed(1)}{" "}
+                  {Number(metrics.scoreAtual || 0).toFixed(1)}{" "}
                   {metrics.totalPeso > 0 && (
                     <span className="text-xs text-gray-400 font-normal">
-                      / {metrics.totalPeso.toFixed(0)}
+                      / {Number(metrics.totalPeso || 0).toFixed(0)}
                     </span>
                   )}
                 </h3>

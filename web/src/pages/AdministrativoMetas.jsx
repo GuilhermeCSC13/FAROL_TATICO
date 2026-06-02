@@ -460,10 +460,10 @@ const AdministrativoMetas = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-800">
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
+      <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-black tracking-tight text-slate-900">
             Farol de Metas — Administrativo
           </h2>
 
@@ -471,7 +471,7 @@ const AdministrativoMetas = () => {
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
               title="Baixar Farol"
             >
               <Download size={16} />
@@ -498,8 +498,8 @@ const AdministrativoMetas = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 mr-4 border-r pr-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => (window.location.hash = "rotinas")}
               className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-gray-200 rounded"
@@ -509,7 +509,7 @@ const AdministrativoMetas = () => {
 
             <button
               onClick={() => setShowConfig(true)}
-              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
               title="Configurações"
             >
               <Settings size={18} />
@@ -521,7 +521,7 @@ const AdministrativoMetas = () => {
             <select
               value={responsavelFiltro}
               onChange={(e) => setResponsavelFiltro(e.target.value)}
-              className="text-xs bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos</option>
               {responsaveis.map((nome) => (

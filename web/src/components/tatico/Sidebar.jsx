@@ -134,7 +134,7 @@ export default function Sidebar() {
     <aside className="w-64 bg-blue-700 text-white flex flex-col min-h-screen font-sans shrink-0 transition-all duration-300">
       {/* Header */}
       <div className="px-4 py-4 border-b border-blue-500/40">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center text-xl font-bold backdrop-blur-sm">
             {primeiroNome.charAt(0).toUpperCase()}
           </div>
