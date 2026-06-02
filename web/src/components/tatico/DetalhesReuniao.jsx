@@ -59,6 +59,7 @@ export default function DetalhesReuniao({
   isRealizada = false,
   onDeleteRequest,
   onCancelRequest, // ✅ NOVO
+  onAplicarHorarioSerie,
 }) {
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
 
@@ -536,6 +537,18 @@ export default function DetalhesReuniao({
               />
             </div>
           </div>
+
+          {editingReuniao && onAplicarHorarioSerie && (
+            <button
+              type="button"
+              onClick={onAplicarHorarioSerie}
+              disabled={isRealizada || isCancelada}
+              className="w-full text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-center gap-2 transition disabled:opacity-50"
+              title="Aplica este horário a todas as próximas reuniões deste tipo"
+            >
+              ⏱ Aplicar horário às próximas reuniões da série
+            </button>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
