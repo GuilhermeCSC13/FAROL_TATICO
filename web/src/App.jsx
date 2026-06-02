@@ -17,6 +17,7 @@ import GestaoAcoes from "./pages/GestaoAcoes";
 import CentralReunioes from "./pages/CentralReunioes";
 import CentralAtas from "./pages/CentralAtas";
 import TiposReuniao from "./pages/TiposReuniao";
+import SalasReuniao from "./pages/SalasReuniao";
 import Copiloto from "./pages/Copiloto";
 import Configuracoes from "./pages/Configuracoes";
 import Projetos from "./pages/Projetos";
@@ -49,6 +50,7 @@ export default function App() {
 
             <Route path="/central-reunioes" element={<CentralReunioes />} />
             <Route path="/tipos-reuniao" element={<TiposReuniao />} />
+            <Route path="/salas-reuniao" element={<SalasReuniao />} />
             <Route path="/central-atas" element={<CentralAtas />} />
             <Route path="/gestao-acoes" element={<GestaoAcoes />} />
 

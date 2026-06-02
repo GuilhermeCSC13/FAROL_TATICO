@@ -12,6 +12,7 @@ import {
   FaTasks,
   FaMicrophone,
   FaTags,
+  FaDoorOpen,
 } from "react-icons/fa";
 
 const setores = [
@@ -283,6 +284,18 @@ export default function Sidebar() {
           >
             <FaCalendarAlt className="text-sm" />
             <span>Agenda Tática</span>
+          </NavLink>
+
+          <NavLink
+            to="/salas-reuniao"
+            className={({ isActive }) =>
+              `${linkBaseClasses} ${
+                isActive ? linkActiveClasses : linkInactiveClasses
+              }`
+            }
+          >
+            <FaDoorOpen className="text-sm" />
+            <span>Salas de Reunião</span>
           </NavLink>
 
           <NavLink
