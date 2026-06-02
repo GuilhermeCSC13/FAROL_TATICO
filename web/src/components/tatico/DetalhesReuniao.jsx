@@ -1,6 +1,7 @@
 // src/components/tatico/DetalhesReuniao.jsx
 import React, { useMemo, useEffect, useState } from "react";
 import AgendaDatePlanner from "./AgendaDatePlanner";
+import PrettyTimePicker from "./PrettyTimePicker";
 import {
   Clock,
   AlignLeft,
@@ -529,19 +530,10 @@ export default function DetalhesReuniao({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Hora (início)
               </label>
-              <div className="relative">
-                <Clock
-                  className="absolute left-3 top-2.5 text-slate-400"
-                  size={16}
-                />
-                <input
-                  type="time"
-                  disabled={isRealizada || isCancelada}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2 text-sm outline-none disabled:opacity-60"
-                  value={formData.hora_inicio}
-                  onChange={(e) => handleChange("hora_inicio", e.target.value)}
-                />
-              </div>
+              <PrettyTimePicker
+                value={formData.hora_inicio}
+                onChange={(v) => handleChange("hora_inicio", v)}
+              />
             </div>
           </div>
 
@@ -550,19 +542,10 @@ export default function DetalhesReuniao({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Hora (término)
               </label>
-              <div className="relative">
-                <Clock
-                  className="absolute left-3 top-2.5 text-slate-400"
-                  size={16}
-                />
-                <input
-                  type="time"
-                  disabled={isRealizada || isCancelada}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2 text-sm outline-none disabled:opacity-60"
-                  value={formData.hora_fim}
-                  onChange={(e) => handleChange("hora_fim", e.target.value)}
-                />
-              </div>
+              <PrettyTimePicker
+                value={formData.hora_fim}
+                onChange={(v) => handleChange("hora_fim", v)}
+              />
             </div>
             <div className="relative">
               <label className="block text-xs font-semibold text-slate-700 mb-1">

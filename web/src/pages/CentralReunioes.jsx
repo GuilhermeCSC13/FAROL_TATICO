@@ -710,6 +710,11 @@ export default function CentralReunioes() {
                   </h3>
                   {reunioes
                     .filter((r) => isSameDay(parseDataLocal(r.data_hora), day))
+                    .sort((a, b) => {
+                      const ha = extractTime(a.horario_inicio) || extractTime(a.data_hora) || "";
+                      const hb = extractTime(b.horario_inicio) || extractTime(b.data_hora) || "";
+                      return ha.localeCompare(hb);
+                    })
                     .map((m) => {
                       const badge = statusBadge(m.status);
                       const timeRange = formatTimeRange(m);
@@ -858,6 +863,11 @@ export default function CentralReunioes() {
                   </span>
                   {reunioes
                     .filter((r) => isSameDay(parseDataLocal(r.data_hora), day))
+                    .sort((a, b) => {
+                      const ha = extractTime(a.horario_inicio) || extractTime(a.data_hora) || "";
+                      const hb = extractTime(b.horario_inicio) || extractTime(b.data_hora) || "";
+                      return ha.localeCompare(hb);
+                    })
                     .map((m) => {
                       const badge = statusBadge(m.status);
                       const timeRange = formatTimeRange(m);
