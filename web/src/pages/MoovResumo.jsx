@@ -7,7 +7,7 @@ import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
 
 // ID da área Moov
-const ID_MOOV = 6;
+const ID_MOOV = 3;
 
 // Meses usados no seletor e nos textos
 const MESES = [

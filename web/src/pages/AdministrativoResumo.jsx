@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide-react';
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
+import { useSearchParams } from 'react-router-dom';
 
 const IDS_ADMIN = [7, 8]; // 7 = Financeiro, 8 = Pessoas
 
@@ -25,10 +26,12 @@ const MESES = [
 ];
 
 const AdministrativoResumo = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
   const [mesSelecionado, setMesSelecionado] = useState(1); // Jan/26
+  const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || "7");
 
   const [metrics, setMetrics] = useState({
     scoreAtual: 0,
@@ -42,16 +45,21 @@ const AdministrativoResumo = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [mesSelecionado]);
+  }, [mesSelecionado, areaFiltro]);
+
+  useEffect(() => {
+    const areaParam = searchParams.get("area");
+    if (areaParam && areaParam !== areaFiltro) setAreaFiltro(areaParam);
+  }, [searchParams, areaFiltro]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Metas (Financeiro + Pessoas)
+      // 1. Metas da área selecionada
       const { data: metas, error: errMetas } = await supabase
         .from('metas_farol')
         .select('*')
-        .in('area_id', IDS_ADMIN);
+        .eq('area_id', Number(areaFiltro));
 
       if (errMetas) throw errMetas;
 
@@ -219,7 +227,7 @@ const AdministrativoResumo = () => {
 
   const mesLabel =
     MESES.find(m => m.id === mesSelecionado)?.label || 'Jan/26';
-  const areaLabel = 'Financeiro + Pessoas';
+  const areaLabel = areaFiltro === "7" ? 'Financeiro' : 'Pessoas';
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -237,6 +245,14 @@ const AdministrativoResumo = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={areaFiltro}
+            onChange={e => setAreaFiltro(e.target.value)}
+            className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
+          >
+            <option value="7">Financeiro</option>
+            <option value="8">Pessoas</option>
+          </select>
           {/* Filtro de Mês */}
           <select
             value={mesSelecionado}
@@ -452,3 +468,4 @@ const AdministrativoResumo = () => {
 };
 
 export default AdministrativoResumo;
+

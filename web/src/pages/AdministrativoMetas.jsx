@@ -3,6 +3,8 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { useSearchParams } from "react-router-dom";
+import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
 // IDs fixos Administrativo (Financeiro + Pessoas)
 const IDS_ADMIN = [7, 8];
@@ -90,6 +92,7 @@ const MESES = [
 ];
 
 const AdministrativoMetas = () => {
+  const [searchParams] = useSearchParams();
   const [areas, setAreas] = useState([]);
   const [areaSelecionada, setAreaSelecionada] = useState(null);
   const [metas, setMetas] = useState([]);
@@ -98,11 +101,26 @@ const AdministrativoMetas = () => {
 
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
+  const {
+    responsavelFiltro,
+    setResponsavelFiltro,
+    responsaveis,
+    itemsFiltrados: metasVisiveis,
+  } = useResponsavelFiltro(metas);
 
   useEffect(() => {
     fetchAreas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const areaParam = searchParams.get("area");
+    if (!areaParam) return;
+    const next = [7, 8].find((id) => String(id) === String(areaParam));
+    if (next && String(next) !== String(areaSelecionada)) {
+      setAreaSelecionada(next);
+    }
+  }, [searchParams, areaSelecionada]);
 
   useEffect(() => {
     if (areaSelecionada) fetchMetasData();
@@ -398,12 +416,15 @@ const AdministrativoMetas = () => {
   };
 
   const totalPeso = useMemo(() => {
-    return metas.reduce((acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0), 0);
-  }, [metas]);
+    return metasVisiveis.reduce(
+      (acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0),
+      0
+    );
+  }, [metasVisiveis]);
 
   const getTotalScore = (mesId) => {
     if (mesId === 14) return "-";
-    const total = metas.reduce(
+    const total = metasVisiveis.reduce(
       (acc, m) => acc + (m.meses[mesId]?.score || 0),
       0
     );
@@ -495,6 +516,22 @@ const AdministrativoMetas = () => {
             </button>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
+            <select
+              value={responsavelFiltro}
+              onChange={(e) => setResponsavelFiltro(e.target.value)}
+              className="text-xs bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos</option>
+              {responsaveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex space-x-2">
             {areas.map((area) => (
               <button
@@ -543,7 +580,7 @@ const AdministrativoMetas = () => {
               </thead>
 
               <tbody>
-                {metas.map((meta) => (
+                {metasVisiveis.map((meta) => (
                   <tr key={meta.id} className="hover:bg-gray-50 text-center">
                     <td className="p-2 text-left font-semibold sticky left-0 bg-white z-10">
                       {meta.nome_meta || meta.indicador}

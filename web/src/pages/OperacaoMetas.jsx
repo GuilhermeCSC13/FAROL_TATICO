@@ -3,6 +3,8 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { useSearchParams } from "react-router-dom";
+import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
 // IDs fixos das áreas (PCO e Gestão de Motoristas)
 const ID_PCO = 4;
@@ -87,6 +89,7 @@ function parseNumberPtBr(raw) {
 }
 
 const OperacaoMetas = () => {
+  const [searchParams] = useSearchParams();
   const [areas, setAreas] = useState([]);
   const [areaSelecionada, setAreaSelecionada] = useState(null);
   const [metas, setMetas] = useState([]);
@@ -95,6 +98,12 @@ const OperacaoMetas = () => {
 
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
+  const {
+    responsavelFiltro,
+    setResponsavelFiltro,
+    responsaveis,
+    itemsFiltrados: metasVisiveis,
+  } = useResponsavelFiltro(metas);
 
   useEffect(() => {
     fetchAreas();
@@ -122,10 +131,18 @@ const OperacaoMetas = () => {
         );
         if (areasFiltradas.length > 0) {
           setAreas(areasFiltradas);
-          setAreaSelecionada(areasFiltradas[0].id);
+          const areaParam = searchParams.get("area");
+          const targetArea = areaParam
+            ? areasFiltradas.find((a) => String(a.id) === String(areaParam))
+            : null;
+          setAreaSelecionada(targetArea?.id || areasFiltradas[0].id);
         } else {
           setAreas(data);
-          setAreaSelecionada(data[0].id);
+          const areaParam = searchParams.get("area");
+          const targetArea = areaParam
+            ? data.find((a) => String(a.id) === String(areaParam))
+            : null;
+          setAreaSelecionada(targetArea?.id || data[0].id);
         }
       }
     } catch (err) {
@@ -397,12 +414,15 @@ const OperacaoMetas = () => {
   };
 
   const totalPeso = useMemo(() => {
-    return metas.reduce((acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0), 0);
-  }, [metas]);
+    return metasVisiveis.reduce(
+      (acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0),
+      0
+    );
+  }, [metasVisiveis]);
 
   const getTotalScore = (mesId) => {
     if (mesId === 14) return "-";
-    const total = metas.reduce(
+    const total = metasVisiveis.reduce(
       (acc, m) => acc + (m.meses[mesId]?.score || 0),
       0
     );
@@ -490,6 +510,22 @@ const OperacaoMetas = () => {
             </button>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
+            <select
+              value={responsavelFiltro}
+              onChange={(e) => setResponsavelFiltro(e.target.value)}
+              className="text-xs bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos</option>
+              {responsaveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex space-x-2">
             {areas.map((area) => (
               <button
@@ -543,7 +579,7 @@ const OperacaoMetas = () => {
               </thead>
 
               <tbody>
-                {metas.map((meta) => (
+                {metasVisiveis.map((meta) => (
                   <tr key={meta.id} className="hover:bg-gray-50 text-center">
                     <td className="p-2 border border-gray-300 text-left font-semibold text-gray-800 text-sm sticky left-0 bg-white z-10">
                       {meta.nome_meta || meta.indicador}
