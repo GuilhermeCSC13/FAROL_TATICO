@@ -177,9 +177,11 @@ export default function CentralReunioes() {
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [salasList, setSalasList] = useState([]);
   const [formData, setFormData] = useState({
     titulo: "",
     tipo_reuniao_id: "",
+    sala_id: "",
     data: "",
     hora_inicio: "09:00",
     hora_fim: "09:15",
@@ -198,7 +200,13 @@ export default function CentralReunioes() {
 
   useEffect(() => {
     fetchTipos();
+    fetchSalas();
   }, []);
+
+  const fetchSalas = async () => {
+    const { data } = await supabase.from("salas").select("*").order("nome");
+    setSalasList(data || []);
+  };
 
   useEffect(() => {
     fetchReunioes();
@@ -279,6 +287,7 @@ export default function CentralReunioes() {
     setFormData({
       titulo: reuniao.titulo || "",
       tipo_reuniao_id: reuniao.tipo_reuniao_id || "",
+      sala_id: reuniao.sala_id || "",
       data: baseDateKey,
       hora_inicio: hhmmIni,
       hora_fim: hhmmFim,
@@ -366,6 +375,7 @@ export default function CentralReunioes() {
       titulo: formData.titulo,
       data_hora: dataHoraIso,
       tipo_reuniao_id: formData.tipo_reuniao_id || null,
+      sala_id: formData.sala_id ? Number(formData.sala_id) : null,
       tipo_reuniao_legacy: tipoNome,
       duracao_segundos,
       cor: formData.cor,
@@ -920,6 +930,7 @@ export default function CentralReunioes() {
                 setFormData={setFormData}
                 editingReuniao={editingReuniao}
                 tipos={tipos}
+                salas={salasList}
                 isRealizada={formData.status === "Realizada"}
                 onDeleteRequest={handleDeleteClick}
                 onCancelRequest={cancelarReuniao} // ✅ NOVO

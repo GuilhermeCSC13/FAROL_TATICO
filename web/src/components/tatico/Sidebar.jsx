@@ -126,7 +126,7 @@ export default function Sidebar() {
   }, [location.pathname, isPlanejamentoActive]);
 
   const linkBaseClasses =
-    "flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors";
+    "flex items-center gap-2.5 px-4 py-2.5 text-[15px] rounded-md transition-colors";
   const linkInactiveClasses =
     "text-blue-100 hover:text-white hover:bg-blue-600/60";
   const linkActiveClasses = "bg-blue-100 text-blue-700 font-semibold";
@@ -336,17 +336,20 @@ export default function Sidebar() {
 
           {/* Configurações (somente Administrador) */}
           {isAdm && (
-            <NavLink
-              to="/configuracoes"
-              className={({ isActive }) =>
-                `${linkBaseClasses} ${
-                  isActive ? linkActiveClasses : linkInactiveClasses
-                }`
-              }
-            >
-              <FaCogs className="text-sm" />
-              <span>Configurações</span>
-            </NavLink>
+            <>
+              <div className="mx-4 my-3 border-t border-blue-500/40" />
+              <NavLink
+                to="/configuracoes"
+                className={({ isActive }) =>
+                  `${linkBaseClasses} ${
+                    isActive ? linkActiveClasses : linkInactiveClasses
+                  }`
+                }
+              >
+                <FaCogs className="text-[15px]" />
+                <span>Configurações</span>
+              </NavLink>
+            </>
           )}
         </div>
       </nav>
