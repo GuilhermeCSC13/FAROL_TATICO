@@ -15,13 +15,41 @@ import {
 } from "react-icons/fa";
 
 const setores = [
-  { key: "operacao", label: "Operação", path: "/planejamento/operacao" },
-  { key: "manutencao", label: "Manutenção", path: "/manutencao" },
-  { key: "moov", label: "Moov", path: "/moov" },
+  {
+    key: "operacao",
+    label: "Operação",
+    path: "/planejamento/operacao",
+    children: [
+      { label: "Visão Geral", to: "/planejamento/operacao?area=4" },
+      { label: "PCO", to: "/planejamento/operacao?area=4" },
+      { label: "Gestão de Motoristas", to: "/planejamento/operacao?area=5" },
+    ],
+  },
+  {
+    key: "manutencao",
+    label: "Manutenção",
+    path: "/manutencao",
+    children: [
+      { label: "Visão Geral", to: "/manutencao?area=2" },
+      { label: "Gestão de Frota", to: "/manutencao?area=2" },
+      { label: "PCM", to: "/manutencao?area=9" },
+    ],
+  },
+  {
+    key: "moov",
+    label: "Moov",
+    path: "/moov",
+    children: [{ label: "Visão Geral", to: "/moov?area=3" }],
+  },
   {
     key: "administrativo",
     label: "Administrativo",
     path: "/planejamento/administrativo",
+    children: [
+      { label: "Visão Geral", to: "/planejamento/administrativo?area=7" },
+      { label: "Financeiro", to: "/planejamento/administrativo?area=7" },
+      { label: "Pessoas", to: "/planejamento/administrativo?area=8" },
+    ],
   },
 ];
 
@@ -158,21 +186,40 @@ export default function Sidebar() {
                 : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-2 pl-2 border-l border-blue-500/30 space-y-1">
+            <div className="ml-2 pl-2 border-l border-blue-500/30 space-y-3">
               {setores.map((setor) => (
-                <NavLink
-                  key={setor.key}
-                  to={setor.path}
-                  className={({ isActive }) =>
-                    `w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors ${
-                      isActive
-                        ? "bg-blue-500 text-white font-semibold"
-                        : "text-blue-50 hover:bg-blue-600/50"
-                    }`
-                  }
-                >
-                  <span>{setor.label}</span>
-                </NavLink>
+                <div key={setor.key} className="space-y-1">
+                  <NavLink
+                    to={setor.path}
+                    className={({ isActive }) =>
+                      `w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors ${
+                        isActive
+                          ? "bg-blue-500 text-white font-semibold"
+                          : "text-blue-50 hover:bg-blue-600/50"
+                      }`
+                    }
+                  >
+                    <span>{setor.label}</span>
+                  </NavLink>
+
+                  <div className="ml-3 pl-3 border-l border-blue-400/30 space-y-1">
+                    {setor.children.map((item) => (
+                      <NavLink
+                        key={`${setor.key}-${item.label}`}
+                        to={item.to}
+                        className={({ isActive }) =>
+                          `block px-3 py-1.5 text-[11px] rounded-md transition-colors ${
+                            isActive
+                              ? "bg-blue-200 text-blue-900 font-semibold"
+                              : "text-blue-100 hover:bg-blue-600/40"
+                          }`
+                        }
+                      >
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

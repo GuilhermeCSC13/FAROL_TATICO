@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide-react';
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
+import { useSearchParams } from 'react-router-dom';
 
 // Meses usados no seletor e nos textos
 const MESES = [
@@ -23,12 +24,13 @@ const MESES = [
 ];
 
 const OperacaoResumo = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
   // Novo: filtro de mês e de área
   const [mesSelecionado, setMesSelecionado] = useState(1);      // 1 = Jan/26
-  const [areaFiltro, setAreaFiltro] = useState('ALL');          // 'ALL' | '4' | '5'
+  const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || '4');          // '4' | '5'
 
   const [metrics, setMetrics] = useState({
     scoreAtual: 0,
@@ -45,17 +47,20 @@ const OperacaoResumo = () => {
     // Recarrega sempre que mudar mês ou área filtrada
   }, [mesSelecionado, areaFiltro]);
 
+  useEffect(() => {
+    const areaParam = searchParams.get("area");
+    if (areaParam && areaParam !== areaFiltro) {
+      setAreaFiltro(areaParam);
+    }
+  }, [searchParams, areaFiltro]);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
       // 1. Busca Metas (Definições) filtrando por área
       let queryMetas = supabase.from('metas_farol').select('*');
 
-      if (areaFiltro === 'ALL') {
-        queryMetas = queryMetas.in('area_id', [4, 5]);
-      } else {
-        queryMetas = queryMetas.eq('area_id', Number(areaFiltro));
-      }
+      queryMetas = queryMetas.eq('area_id', Number(areaFiltro));
 
       const { data: metas, error: errMetas } = await queryMetas;
       if (errMetas) throw errMetas;
@@ -225,9 +230,7 @@ const OperacaoResumo = () => {
     MESES.find(m => m.id === mesSelecionado)?.label || 'Jan/26';
 
   const areaLabel =
-    areaFiltro === 'ALL'
-      ? 'PCO + Gestão de Motoristas'
-      : areaFiltro === '4'
+    areaFiltro === '4'
       ? 'PCO'
       : 'Gestão de Motoristas';
 
@@ -253,7 +256,6 @@ const OperacaoResumo = () => {
             onChange={e => setAreaFiltro(e.target.value)}
             className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
           >
-            <option value="ALL">Operação (PCO + Motoristas)</option>
             <option value="4">PCO</option>
             <option value="5">Gestão de Motoristas</option>
           </select>

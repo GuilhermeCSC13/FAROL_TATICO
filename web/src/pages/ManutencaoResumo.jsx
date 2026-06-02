@@ -18,6 +18,7 @@ import {
   Settings,
 } from "lucide-react";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
+import { useSearchParams } from "react-router-dom";
 
 const ID_GESTAO_FROTA = 2;
 const ID_PCM = 9;
@@ -66,11 +67,12 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoResumo = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
   const [mesSelecionado, setMesSelecionado] = useState(1);
-  const [areaFiltro, setAreaFiltro] = useState("ALL");
+  const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || String(ID_GESTAO_FROTA));
 
   const [metrics, setMetrics] = useState({
     scoreAtual: 0,
@@ -87,6 +89,13 @@ const ManutencaoResumo = () => {
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesSelecionado, areaFiltro]);
+
+  useEffect(() => {
+    const areaParam = searchParams.get("area");
+    if (areaParam && areaParam !== areaFiltro) {
+      setAreaFiltro(areaParam);
+    }
+  }, [searchParams, areaFiltro]);
 
   const calculateScore = (meta, realizado, tipo, pesoTotal) => {
     if (
@@ -147,11 +156,7 @@ const ManutencaoResumo = () => {
     try {
       let queryMetas = supabase.from("metas_farol").select("*");
 
-      if (areaFiltro === "ALL") {
-        queryMetas = queryMetas.in("area_id", [ID_GESTAO_FROTA, ID_PCM]);
-      } else {
-        queryMetas = queryMetas.eq("area_id", Number(areaFiltro));
-      }
+      queryMetas = queryMetas.eq("area_id", Number(areaFiltro));
 
       const { data: metas, error: errMetas } = await queryMetas;
       if (errMetas) throw errMetas;
@@ -278,9 +283,7 @@ const ManutencaoResumo = () => {
     MESES.find((m) => m.id === mesSelecionado)?.label || "Jan/26";
 
   const areaLabel =
-    areaFiltro === "ALL"
-      ? "PCM + Gestão de Frota"
-      : areaFiltro === String(ID_PCM)
+    areaFiltro === String(ID_PCM)
       ? "PCM"
       : "Gestão de Frota";
 
@@ -304,7 +307,6 @@ const ManutencaoResumo = () => {
             onChange={(e) => setAreaFiltro(e.target.value)}
             className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
           >
-            <option value="ALL">Gestão de Frota (PCM + Gestão de Frota)</option>
             <option value={String(ID_PCM)}>PCM</option>
             <option value={String(ID_GESTAO_FROTA)}>Gestão de Frota</option>
           </select>

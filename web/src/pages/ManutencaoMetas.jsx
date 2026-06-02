@@ -3,6 +3,8 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { useSearchParams } from "react-router-dom";
+import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
 const ID_GESTAO_FROTA = 2;
 const ID_PCM = 9;
@@ -88,17 +90,34 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoMetas = () => {
+  const [searchParams] = useSearchParams();
   const [areaSelecionada, setAreaSelecionada] = useState(ID_GESTAO_FROTA);
   const [metas, setMetas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
   const [openExport, setOpenExport] = useState(false);
   const tableWrapRef = useRef(null);
+  const {
+    responsavelFiltro,
+    setResponsavelFiltro,
+    responsaveis,
+    itemsFiltrados: metasVisiveis,
+  } = useResponsavelFiltro(metas);
 
   useEffect(() => {
     fetchMetasData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaSelecionada]);
+
+  useEffect(() => {
+    const areaParam = searchParams.get("area");
+    if (areaParam && String(areaParam) !== String(areaSelecionada)) {
+      const next = [ID_GESTAO_FROTA, ID_PCM].find(
+        (id) => String(id) === String(areaParam)
+      );
+      if (next) setAreaSelecionada(next);
+    }
+  }, [searchParams, areaSelecionada]);
 
   const isBinaryMeta = (metaRow) => {
     const unidade = String(metaRow?.unidade ?? "").trim().toLowerCase();
@@ -350,12 +369,18 @@ const ManutencaoMetas = () => {
   };
 
   const totalPeso = useMemo(() => {
-    return metas.reduce((acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0), 0);
-  }, [metas]);
+    return metasVisiveis.reduce(
+      (acc, m) => acc + (parseNumberPtBr(m.peso) ?? 0),
+      0
+    );
+  }, [metasVisiveis]);
 
   const getTotalScore = (mesId) => {
     if (mesId === 14) return "-";
-    const total = metas.reduce((acc, m) => acc + (m.meses[mesId]?.score || 0), 0);
+    const total = metasVisiveis.reduce(
+      (acc, m) => acc + (m.meses[mesId]?.score || 0),
+      0
+    );
     return total.toFixed(1);
   };
 
@@ -440,6 +465,22 @@ const ManutencaoMetas = () => {
             </button>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
+            <select
+              value={responsavelFiltro}
+              onChange={(e) => setResponsavelFiltro(e.target.value)}
+              className="text-xs bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos</option>
+              {responsaveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex space-x-2">
             {AREAS_MANUTENCAO.map((area) => (
               <button
@@ -492,7 +533,7 @@ const ManutencaoMetas = () => {
               </thead>
 
               <tbody>
-                {metas.map((meta) => (
+                {metasVisiveis.map((meta) => (
                   <tr key={meta.id} className="hover:bg-gray-50 text-center">
                     <td className="p-1 text-left font-semibold sticky left-0 bg-white z-10 border border-gray-300 leading-tight break-words">
                       {meta.nome_meta || meta.indicador}
