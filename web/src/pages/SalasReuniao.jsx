@@ -1,5 +1,5 @@
 // src/pages/SalasReuniao.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
 import { supabase } from "../supabaseClient";
@@ -534,7 +534,7 @@ function ModalGerenciarSalas({ aberto, salas, onClose, onChanged }) {
 // ─────────────────────────────────────────────────────────────────────────
 const DEFAULT_START = 8;
 const DEFAULT_END = 18; // exclusivo, mostra 8..17
-const HOUR_HEIGHT = 56; // px por hora
+const HOUR_HEIGHT_MIN = 56; // px mínimos por hora (não comprime menos que isso)
 
 function timeToMinutes(s) {
   const t = extractTime(s) || "00:00";
@@ -564,30 +564,50 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
     for (let h = hourStart; h < hourEnd; h++) arr.push(h);
     return arr;
   }, [hourStart, hourEnd]);
-  const totalHeight = (hourEnd - hourStart) * HOUR_HEIGHT;
+
+  // Calcula hourHeight dinâmico para preencher a altura disponível.
+  const scrollRef = useRef(null);
+  const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_MIN);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      // Header dos dias ocupa ~40px; sobra pra grade.
+      const available = el.clientHeight - 40;
+      if (available <= 0 || horas.length === 0) return;
+      const computed = Math.max(HOUR_HEIGHT_MIN, available / horas.length);
+      setHourHeight(computed);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [horas.length]);
+
+  const totalHeight = horas.length * hourHeight;
 
   const getTopPx = (timeStr) => {
     const min = timeToMinutes(timeStr);
     const offset = min - hourStart * 60;
-    return Math.max(0, (offset / 60) * HOUR_HEIGHT);
+    return Math.max(0, (offset / 60) * hourHeight);
   };
   const getHeightPx = (iniStr, fimStr) => {
     const ini = timeToMinutes(iniStr);
     const fim = timeToMinutes(fimStr);
     const dur = Math.max(15, fim - ini);
-    return (dur / 60) * HOUR_HEIGHT;
+    return (dur / 60) * hourHeight;
   };
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="flex min-w-[860px]">
+    <div ref={scrollRef} className="flex-1 overflow-auto">
+      <div className="flex min-w-[860px]" style={{ minHeight: "100%" }}>
         {/* Gutter de horas */}
         <div className="w-16 flex-none border-r border-slate-100 pt-10">
           {horas.map((h) => (
             <div
               key={h}
               className="text-[10px] text-slate-400 font-bold text-right pr-2 -translate-y-1.5"
-              style={{ height: HOUR_HEIGHT }}
+              style={{ height: hourHeight }}
             >
               {String(h).padStart(2, "0")}:00
             </div>
@@ -632,19 +652,19 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
                       className={`absolute left-0 right-0 border-t ${
                         i === 0 ? "border-transparent" : "border-slate-100"
                       }`}
-                      style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                      style={{ top: i * hourHeight, height: hourHeight }}
                     >
                       {/* meia-hora */}
                       <div
                         className="absolute left-0 right-0 border-t border-dashed border-slate-100/60"
-                        style={{ top: HOUR_HEIGHT / 2 }}
+                        style={{ top: hourHeight / 2 }}
                       />
                     </div>
                   ))}
 
                   {/* Linha de "agora" */}
                   {ehHoje && (
-                    <NowLine hourStart={hourStart} hourEnd={hourEnd} />
+                    <NowLine hourStart={hourStart} hourEnd={hourEnd} hourHeight={hourHeight} />
                   )}
 
                   {/* Itens posicionados */}
@@ -703,7 +723,7 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
   );
 }
 
-function NowLine({ hourStart, hourEnd }) {
+function NowLine({ hourStart, hourEnd, hourHeight }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -712,7 +732,7 @@ function NowLine({ hourStart, hourEnd }) {
   const minutos = now.getHours() * 60 + now.getMinutes();
   const offset = minutos - hourStart * 60;
   if (offset < 0 || offset > (hourEnd - hourStart) * 60) return null;
-  const top = (offset / 60) * HOUR_HEIGHT;
+  const top = (offset / 60) * hourHeight;
   return (
     <div
       className="absolute left-0 right-0 z-10 pointer-events-none"
