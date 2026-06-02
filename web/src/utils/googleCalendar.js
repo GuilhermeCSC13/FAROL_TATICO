@@ -142,13 +142,33 @@ function splitDataHora(value) {
   return null;
 }
 
+// Extrai apenas "HH:MM:SS" de qualquer formato (time-only, ISO, com Z, etc.)
+function extractTimeOnly(value) {
+  if (!value) return null;
+  const s = String(value);
+  let core = s;
+  if (core.includes("T")) core = core.split("T")[1] || "";
+  if (core.includes(" ")) core = core.split(" ").pop() || "";
+  // remove offset/zona se vier junto
+  core = core.replace(/Z$/i, "").split(/[+\-]/)[0].trim();
+  if (!core.includes(":")) return null;
+  const segs = core.split(":");
+  if (segs.length < 2) return null;
+  const pad = (v) => String(v).padStart(2, "0").slice(0, 2);
+  const hh = pad(segs[0]);
+  const mm = pad(segs[1]);
+  const ss = segs[2] ? pad(segs[2].split(".")[0]) : "00";
+  if (Number.isNaN(Number(hh)) || Number.isNaN(Number(mm))) return null;
+  return `${hh}:${mm}:${ss}`;
+}
+
 function combinarDataHora(dataISO, horaStr) {
   // dataISO ex.: "2026-06-03T09:00:00+00:00"  → pega só a data
-  // horaStr  ex.: "09:00" ou "09:00:00"
+  // horaStr  ex.: "09:00", "09:00:00", "2026-06-03T09:00:00"
   const parts = splitDataHora(dataISO);
   if (!parts) return null;
-  const t = String(horaStr || "").substring(0, 8);
-  const hora = t.length === 5 ? `${t}:00` : t;
+  const hora = extractTimeOnly(horaStr);
+  if (!hora) return null;
   return `${parts.date}T${hora}`;
 }
 
@@ -167,21 +187,27 @@ function addMinutosWallClock(dateTimeLocal, minutos) {
 }
 
 function resolveStartEnd(reuniao) {
-  // Start: prioridade horario_inicio combinado com a data, senão data_hora cru
+  // Tenta na ordem: combinar data_hora + horario_inicio; só data_hora;
+  // se nada disso, tenta extrair direto do horario_inicio (caso ele seja ISO).
   let start = null;
   const parts = splitDataHora(reuniao.data_hora);
-  if (reuniao.horario_inicio && parts) {
-    start = combinarDataHora(reuniao.data_hora, reuniao.horario_inicio);
-  } else if (parts) {
-    start = `${parts.date}T${parts.time}`;
+
+  if (parts) {
+    const horaIni = extractTimeOnly(reuniao.horario_inicio) || parts.time;
+    start = `${parts.date}T${horaIni}`;
+  } else if (reuniao.horario_inicio) {
+    const fallback = splitDataHora(reuniao.horario_inicio);
+    if (fallback) start = `${fallback.date}T${fallback.time}`;
   }
 
   let end = null;
-  if (reuniao.horario_fim && parts) {
-    end = combinarDataHora(reuniao.data_hora, reuniao.horario_fim);
-  }
-  if (!end && start) {
-    end = addMinutosWallClock(start, 60); // default 1h
+  if (start) {
+    if (reuniao.horario_fim) {
+      const hf = extractTimeOnly(reuniao.horario_fim);
+      const dateOnly = start.split("T")[0];
+      if (hf) end = `${dateOnly}T${hf}`;
+    }
+    if (!end) end = addMinutosWallClock(start, 60);
   }
   return { start, end };
 }
@@ -235,6 +261,13 @@ function nearestGoogleColorId(hex) {
 // Monta o payload de evento a partir da reunião do Farol
 function reuniaoToEvent(reuniao, tipoNome, tipoCor) {
   const { start, end } = resolveStartEnd(reuniao);
+  if (!start || !end) {
+    const err = new Error(
+      `Reunião sem data/hora válida (id=${reuniao.id}, data_hora=${reuniao.data_hora}, inicio=${reuniao.horario_inicio})`
+    );
+    err.code = "INVALID_DATETIME";
+    throw err;
+  }
 
   const titulo = reuniao.titulo || tipoNome || "Reunião";
   const descricao = [
