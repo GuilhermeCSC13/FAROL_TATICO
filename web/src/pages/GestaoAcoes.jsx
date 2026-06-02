@@ -5,10 +5,33 @@ import { supabase } from '../supabaseClient';
 import { CheckCircle, ExternalLink, Search, Trash2, User, Calendar, Clock, AlertCircle, BarChart2, List } from 'lucide-react';
 import ModalDetalhesAcao from '../components/tatico/ModalDetalhesAcao';
 
+// Normaliza um nome para deduplicar (case+espaço-insensível)
+const normNome = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+// Title-case simples
+const titleCase = (s) =>
+  String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((w) => (w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
+
+const getMeuNome = () => {
+  try {
+    const raw = localStorage.getItem('usuario_externo');
+    if (!raw) return '';
+    const u = JSON.parse(raw);
+    return String(u?.nome_completo || u?.nome || '').trim();
+  } catch {
+    return '';
+  }
+};
+
 const GestaoAcoes = () => {
   const [acoes, setAcoes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('lista'); // 'lista' | 'resumo'
+  const [viewMode, setViewMode] = useState('resumo'); // 'lista' | 'resumo' — começa em resumo
 
   const [acaoSelecionada, setAcaoSelecionada] = useState(null);
   const [showModalDetalhes, setShowModalDetalhes] = useState(false);
@@ -74,8 +97,23 @@ const GestaoAcoes = () => {
 
     if (data) {
       setAcoes(data);
-      const resps = [...new Set(data.map(item => item.responsavel).filter(Boolean))].sort();
-      const origens = [...new Set(data.map(item => item.tipo_reuniao).filter(Boolean))].sort();
+
+      // Dedup case-insensitive: agrupa nomes equivalentes, mostra a versão "mais bonita"
+      const mapResp = new Map();
+      data.forEach((item) => {
+        const r = item.responsavel;
+        if (!r) return;
+        const key = normNome(r);
+        if (!key) return;
+        const atual = mapResp.get(key);
+        // Prefere versão com mais letras maiúsculas iniciais (mais "limpa")
+        if (!atual || titleCase(r) === r.trim()) {
+          mapResp.set(key, titleCase(r));
+        }
+      });
+      const resps = [...mapResp.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      const origens = [...new Set(data.map(item => (item.tipo_reuniao || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
       setListaResponsaveis(resps);
       setListaOrigens(origens);
 
@@ -106,16 +144,44 @@ const GestaoAcoes = () => {
   };
 
   const acoesFiltradas = useMemo(() => {
-    return acoes.filter(acao => {
+    const respAlvo = normNome(filtroResponsavel);
+    const origemAlvo = (filtroOrigem || '').trim().toLowerCase();
+    const filtradas = acoes.filter(acao => {
       const statusCalculado = getStatusAcao(acao);
       const matchTexto = (acao.descricao || '').toLowerCase().includes(filtroTexto.toLowerCase());
       const matchStatus = filtroStatus === 'Todas' ? true : statusCalculado === filtroStatus;
-      const matchResp = filtroResponsavel === 'Todos' ? true : acao.responsavel === filtroResponsavel;
-      const matchOrigem = filtroOrigem === 'Todas' ? true : acao.tipo_reuniao === filtroOrigem;
+      const matchResp = filtroResponsavel === 'Todos' ? true : normNome(acao.responsavel) === respAlvo;
+      const matchOrigem = filtroOrigem === 'Todas' ? true : (acao.tipo_reuniao || '').trim().toLowerCase() === origemAlvo;
 
       return matchTexto && matchStatus && matchResp && matchOrigem;
     });
+
+    // Prioriza Vencida > Pendente > Concluída > Excluída e, dentro, vencimento mais antigo primeiro
+    const peso = { 'Vencida': 0, 'Pendente': 1, 'Concluída': 2, 'Excluída': 3 };
+    return filtradas.sort((a, b) => {
+      const sa = getStatusAcao(a);
+      const sb = getStatusAcao(b);
+      if (peso[sa] !== peso[sb]) return peso[sa] - peso[sb];
+      const da = a.data_vencimento ? new Date(a.data_vencimento).getTime() : Number.MAX_SAFE_INTEGER;
+      const db = b.data_vencimento ? new Date(b.data_vencimento).getTime() : Number.MAX_SAFE_INTEGER;
+      return da - db;
+    });
   }, [acoes, filtroTexto, filtroStatus, filtroResponsavel, filtroOrigem]);
+
+  const meuNome = useMemo(() => getMeuNome(), []);
+  const aplicarMinhasAcoes = () => {
+    if (!meuNome) {
+      alert('Não identifiquei seu usuário para filtrar.');
+      return;
+    }
+    // Acha versão deduplicada equivalente
+    const alvo = listaResponsaveis.find((r) => normNome(r) === normNome(meuNome)) || meuNome;
+    setFiltroResponsavel(alvo);
+    setFiltroStatus('Todas');
+    setFiltroTexto('');
+    setFiltroOrigem('Todas');
+    setViewMode('lista');
+  };
 
   const cardsResumo = useMemo(() => {
     let pendente = 0; let vencida = 0; let concluida = 0; let excluida = 0;
@@ -132,28 +198,33 @@ const GestaoAcoes = () => {
   // --------- DADOS DA TELA DE RESUMO ----------
   const dadosDashboard = useMemo(() => {
     const stats = {};
-    
+
     acoesFiltradas.forEach(acao => {
       const s = getStatusAcao(acao);
       if (s === 'Excluída') return;
 
-      const resp = acao.responsavel || 'Sem Responsável';
-      if (!stats[resp]) {
-        stats[resp] = { total: 0, pendente: 0, vencida: 0, concluida: 0 };
+      const respRaw = acao.responsavel || 'Sem Responsável';
+      const key = normNome(respRaw) || 'sem responsavel';
+      if (!stats[key]) {
+        stats[key] = { nome: titleCase(respRaw), total: 0, pendente: 0, vencida: 0, concluida: 0 };
       }
-      
-      stats[resp].total++;
-      if (s === 'Pendente') stats[resp].pendente++;
-      if (s === 'Vencida') stats[resp].vencida++;
-      if (s === 'Concluída') stats[resp].concluida++;
+
+      stats[key].total++;
+      if (s === 'Pendente') stats[key].pendente++;
+      if (s === 'Vencida') stats[key].vencida++;
+      if (s === 'Concluída') stats[key].concluida++;
     });
 
-    const rankingVencidas = Object.entries(stats)
-      .map(([nome, dados]) => ({ nome, ...dados }))
-      .sort((a, b) => b.vencida - a.vencida || b.total - a.total);
-
-    return rankingVencidas;
+    return Object.values(stats).sort((a, b) => b.vencida - a.vencida || b.total - a.total);
   }, [acoesFiltradas]);
+
+  const handleClickResponsavelResumo = (nome) => {
+    const alvo = listaResponsaveis.find((r) => normNome(r) === normNome(nome)) || nome;
+    setFiltroResponsavel(alvo);
+    setFiltroStatus('Todas');
+    setFiltroTexto('');
+    setViewMode('lista');
+  };
 
   const abrirModalDetalhes = (acao) => {
     setAcaoSelecionada(acao);
@@ -191,9 +262,19 @@ const GestaoAcoes = () => {
             </div>
             
             {viewMode === 'lista' && (
-              <div className="text-sm text-gray-500">
-                Total: <b>{acoesFiltradas.length}</b> ações
-              </div>
+              <>
+                <button
+                  type="button"
+                  onClick={aplicarMinhasAcoes}
+                  className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-4 py-2 rounded-lg font-black text-xs tracking-wide shadow-sm active:scale-95 transition-all flex items-center gap-2"
+                  title="Filtrar pelas minhas ações (prioriza Vencidas e Pendentes)"
+                >
+                  <User size={14} /> MINHAS AÇÕES
+                </button>
+                <div className="text-sm text-gray-500">
+                  Total: <b>{acoesFiltradas.length}</b> ações
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -221,6 +302,9 @@ const GestaoAcoes = () => {
         {viewMode === 'resumo' ? (
           // --------- TELA DE RESUMO ----------
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex-1 overflow-auto">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 flex items-center gap-2">
+              <AlertCircle size={16} /> Clique em <b>Lista</b> para ver suas ações, ou clique no seu nome abaixo.
+            </div>
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
               <AlertCircle className="text-red-500" size={20} />
               Desempenho por Responsável
@@ -247,8 +331,8 @@ const GestaoAcoes = () => {
                     dadosDashboard.map((row, idx) => {
                       const taxa = row.total > 0 ? Math.round((row.concluida / row.total) * 100) : 0;
                       return (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="p-3 font-medium text-gray-800">{row.nome}</td>
+                        <tr key={idx} className="hover:bg-blue-50 cursor-pointer" onClick={() => handleClickResponsavelResumo(row.nome)}>
+                          <td className="p-3 font-medium text-blue-700 underline-offset-2 hover:underline">{row.nome}</td>
                           <td className="p-3 text-center font-bold">{row.total}</td>
                           <td className="p-3 text-center text-green-600 font-semibold">{row.concluida}</td>
                           <td className="p-3 text-center text-yellow-600 font-semibold">{row.pendente}</td>
