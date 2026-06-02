@@ -591,7 +591,7 @@ const AdministrativoMetas = () => {
                                 className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50"
                                 placeholder="-"
                                 defaultValue={
-                                  valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)
+                                  valorRealizado === "" ? "" : formatFarolValue(valorRealizado, meta.unidade)
                                 }
                                 onBlur={(e) =>
                                   handleSave(meta.id, 14, e.target.value, meta)
@@ -648,7 +648,7 @@ const AdministrativoMetas = () => {
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
                               {dados.alvo !== null && dados.alvo !== undefined
-                                ? formatFarolValue(dados.alvo, row.unidade)
+                                ? formatFarolValue(dados.alvo, meta.unidade)
                                 : ""}
                             </div>
 
@@ -658,7 +658,7 @@ const AdministrativoMetas = () => {
                               className="w-full text-center bg-transparent font-bold text-xs focus:bg-white/50"
                               placeholder="-"
                               defaultValue={
-                                valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)
+                                valorRealizado === "" ? "" : formatFarolValue(valorRealizado, meta.unidade)
                               }
                               onBlur={(e) =>
                                 handleSave(meta.id, mes.id, e.target.value, meta)

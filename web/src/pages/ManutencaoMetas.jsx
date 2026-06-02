@@ -388,7 +388,7 @@ const ManutencaoMetas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-      const areaName = areas.find((a) => a.id === areaSelecionada)?.nome || "Gestao_de_Frota";
+      const areaName = AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome || "Gestao_de_Frota";
 
       await exportFullElementAsImage({
         element: tableWrapRef.current,
@@ -405,7 +405,7 @@ const ManutencaoMetas = () => {
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
       <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
         <h2 className="text-lg font-black tracking-tight text-slate-900">
-          Farol de Metas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Gestão de Frota"}
+          Farol de Metas — {AREAS_MANUTENCAO.find((area) => area.id === areaSelecionada)?.nome || "Gestão de Frota"}
         </h2>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -550,7 +550,7 @@ const ManutencaoMetas = () => {
                                 defaultValue={
                                   valorRealizado === ""
                                     ? ""
-                                    : formatFarolValue(valorRealizado, row.unidade)
+                                    : formatFarolValue(valorRealizado, meta.unidade)
                                 }
                                 onBlur={(e) =>
                                   handleSave(meta.id, 14, e.target.value, meta)
@@ -610,7 +610,7 @@ const ManutencaoMetas = () => {
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
                               {dados.alvo !== null && dados.alvo !== undefined
-                                ? formatFarolValue(dados.alvo, row.unidade)
+                                ? formatFarolValue(dados.alvo, meta.unidade)
                                 : ""}
                             </div>
 
@@ -622,7 +622,7 @@ const ManutencaoMetas = () => {
                               defaultValue={
                                 valorRealizado === ""
                                   ? ""
-                                  : formatFarolValue(valorRealizado, row.unidade)
+                                  : formatFarolValue(valorRealizado, meta.unidade)
                               }
                               onBlur={(e) =>
                                 handleSave(meta.id, mes.id, e.target.value, meta)
