@@ -121,6 +121,20 @@ function calcDuracaoSegundos(inicioHHMM, fimHHMM) {
   }
 }
 
+function sameSeriesCandidate(a, b) {
+  if (!a || !b) return false;
+  return (
+    String(a.titulo || "").trim().toLowerCase() ===
+      String(b.titulo || "").trim().toLowerCase() &&
+    String(a.tipo_reuniao_id || "") === String(b.tipo_reuniao_id || "") &&
+    String(a.tipo_reuniao_legacy || "").trim().toLowerCase() ===
+      String(b.tipo_reuniao_legacy || "").trim().toLowerCase() &&
+    String(a.responsavel || "").trim().toLowerCase() ===
+      String(b.responsavel || "").trim().toLowerCase() &&
+    String(a.area_id || "") === String(b.area_id || "")
+  );
+}
+
 // ✅ NOVO: salvar participantes manuais após criar a reunião (para não sumir)
 async function salvarParticipantesManuais(reuniaoId, participantes) {
   const lista = Array.isArray(participantes) ? participantes : [];
@@ -233,6 +247,16 @@ export default function CentralReunioes() {
 
   const handleEdit = (reuniao) => {
     const dt = parseDataLocal(reuniao.data_hora);
+    const baseDateKey = format(dt, "yyyy-MM-dd");
+    const seriesDates = reunioes
+      .filter(
+        (r) =>
+          String(r.id) !== String(reuniao.id) &&
+          sameSeriesCandidate(r, reuniao) &&
+          parseDataLocal(r.data_hora) >= dt
+      )
+      .sort((a, b) => parseDataLocal(a.data_hora) - parseDataLocal(b.data_hora))
+      .map((r) => format(parseDataLocal(r.data_hora), "yyyy-MM-dd"));
     const hhmmIni =
       extractTime(reuniao.horario_inicio) ||
       extractTime(reuniao.gravacao_inicio) ||
@@ -249,7 +273,7 @@ export default function CentralReunioes() {
     setFormData({
       titulo: reuniao.titulo || "",
       tipo_reuniao_id: reuniao.tipo_reuniao_id || "",
-      data: format(dt, "yyyy-MM-dd"),
+      data: baseDateKey,
       hora_inicio: hhmmIni,
       hora_fim: hhmmFim,
       cor: reuniao.cor || "#3B82F6",
@@ -257,7 +281,10 @@ export default function CentralReunioes() {
       ata: reuniao.ata || "",
       status: reuniao.status || "Agendada",
       materiais: reuniao.materiais || [],
-      participantes_manuais: [], // ✅ DetalhesReuniao carrega do banco quando editando
+      participantes_manuais: [],
+      agenda_mode: seriesDates.length > 0 ? "multipla" : "unica",
+      datas_selecionadas: [baseDateKey, ...seriesDates],
+      recurrence_rule: "semanal",
     });
 
     setEditingReuniao(reuniao);
@@ -560,6 +587,9 @@ export default function CentralReunioes() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Calendário Tático</h1>
+            <p className="mt-1 text-sm font-bold text-red-600">
+              Escolha a melhor visualização para voce
+            </p>
           </div>
           <div className="flex gap-2">
             <div className="bg-white border p-1 rounded-lg flex shadow-sm">

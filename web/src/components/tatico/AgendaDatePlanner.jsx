@@ -126,11 +126,10 @@ export default function AgendaDatePlanner({
   const applyShortcut = (rule) => {
     const base = primaryDate || formatDateKey(new Date());
     const generated = generateRecurringDates(base, rule, 6);
-    const merged = sortUniqueDates([...normalizedDates, ...generated]);
     onRecurrenceRuleChange?.(rule);
     onModeChange?.("multipla");
     if (!singleDate) onSingleDateChange?.(base);
-    updateDates(merged);
+    updateDates(generated);
     setCursor(parseSafeDate(base));
   };
 
@@ -151,9 +150,6 @@ export default function AgendaDatePlanner({
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.28em] text-sky-700">
               {label}
-            </p>
-            <p className="mt-1 text-[11px] font-bold text-red-600">
-              Escolha a melhor visualização para voce
             </p>
             <p className="mt-1 text-xs text-slate-500">{helperText}</p>
           </div>
@@ -218,7 +214,7 @@ export default function AgendaDatePlanner({
           </button>
 
           {open && !disabled && (
-            <div className="absolute left-0 right-0 top-[calc(100%+12px)] z-30 rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="mt-3 max-h-[65vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
               <div className="flex items-center justify-between gap-2 mb-4">
                 <button
                   type="button"
@@ -374,11 +370,6 @@ export default function AgendaDatePlanner({
           </div>
         )}
 
-        {mode === "unica" && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            <span className="font-bold text-slate-700">Google Agenda:</span> a integração vai depender da revisão do cadastro da pessoa. Por enquanto estamos organizando o fluxo visual e de recorrência.
-          </div>
-        )}
       </div>
     </section>
   );

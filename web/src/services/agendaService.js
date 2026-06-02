@@ -60,6 +60,36 @@ function buildBasePayload(dados) {
   };
 }
 
+function shouldKeepFutureStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (!s) return "Agendada";
+  if (s.includes("realiz") || s.includes("cancel")) return "Agendada";
+  if (s.includes("pend")) return "Pendente";
+  return status || "Agendada";
+}
+
+function buildSeriesSignature(row) {
+  return {
+    titulo: String(row?.titulo || "").trim().toLowerCase(),
+    tipoReuniaoId: row?.tipo_reuniao_id ? String(row.tipo_reuniao_id) : "",
+    tipoLegacy: String(row?.tipo_reuniao_legacy || "").trim().toLowerCase(),
+    responsavel: String(row?.responsavel || "").trim().toLowerCase(),
+    areaId: row?.area_id ? String(row.area_id) : "",
+  };
+}
+
+function sameSeries(a, b) {
+  const sa = buildSeriesSignature(a);
+  const sb = buildSeriesSignature(b);
+  return (
+    sa.titulo === sb.titulo &&
+    sa.tipoReuniaoId === sb.tipoReuniaoId &&
+    sa.tipoLegacy === sb.tipoLegacy &&
+    sa.responsavel === sb.responsavel &&
+    sa.areaId === sb.areaId
+  );
+}
+
 export const salvarReuniao = async (dados, regraRecorrencia) => {
   const config = parseRecurrenceConfig(regraRecorrencia);
   const modo = String(config.mode || "unica").toLowerCase();
@@ -115,19 +145,58 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
       config.timeValue || payloadAtual.data_hora || "09:00",
       "09:00"
     );
-    const datas =
+    const { data: original, error: errOrig } = await supabase
+      .from("reunioes")
+      .select(
+        "id, titulo, data_hora, tipo_reuniao_id, tipo_reuniao_legacy, responsavel, area_id"
+      )
+      .eq("id", id)
+      .single();
+
+    if (errOrig || !original) {
+      return { error: errOrig || new Error("Original não encontrada") };
+    }
+
+    const { data: futureRows, error: errFuture } = await supabase
+      .from("reunioes")
+      .select(
+        "id, titulo, data_hora, tipo_reuniao_id, tipo_reuniao_legacy, responsavel, area_id"
+      )
+      .neq("id", id)
+      .gt("data_hora", original.data_hora)
+      .order("data_hora", { ascending: true });
+
+    if (errFuture) return { error: errFuture };
+
+    const seriesRows = (futureRows || []).filter((row) => sameSeries(row, original));
+    const allRows = [original, ...seriesRows];
+    const baseDate = payloadAtual.data_hora || original.data_hora || new Date();
+    let generatedDates =
       datasSelecionadas.length > 0
         ? datasSelecionadas
         : generateRecurringDates(
-            payloadAtual.data_hora || new Date(),
+            baseDate,
             config.rule || config.recurrenceRule || "semanal",
-            config.count || 6
+            Math.max(allRows.length, config.count || 6)
           );
 
-    const [primeira, ...resto] = datas;
+    while (generatedDates.length < allRows.length) {
+      const lastDate = generatedDates[generatedDates.length - 1] || baseDate;
+      const fallbackDates = generateRecurringDates(
+        lastDate,
+        config.rule || config.recurrenceRule || "semanal",
+        2
+      );
+      const next = fallbackDates[1] || fallbackDates[0];
+      if (!next) break;
+      generatedDates.push(next);
+    }
+
+    const datesForRows = generatedDates.slice(0, allRows.length);
+
     const payloadPrimeiro = {
       ...payloadAtual,
-      data_hora: buildDateTimeValue(primeira || payloadAtual.data_hora, horaBase),
+      data_hora: buildDateTimeValue(datesForRows[0] || original.data_hora, horaBase),
     };
 
     const { error: errUpdateAtual } = await supabase
@@ -137,17 +206,37 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
 
     if (errUpdateAtual) return { error: errUpdateAtual };
 
-    if (resto.length > 0) {
-      const payloadSerie = resto.map((dateKey) => ({
+    for (let i = 1; i < allRows.length; i += 1) {
+      const row = allRows[i];
+      const updatePayload = {
         ...payloadAtual,
+        status: shouldKeepFutureStatus(payloadAtual.status),
+        data_hora: buildDateTimeValue(datesForRows[i], horaBase),
+      };
+      delete updatePayload.horario_inicio;
+      delete updatePayload.horario_fim;
+      if (updatePayload.materiais === undefined) delete updatePayload.materiais;
+
+      const { error: errUpdateFuture } = await supabase
+        .from("reunioes")
+        .update(updatePayload)
+        .eq("id", row.id);
+
+      if (errUpdateFuture) return { error: errUpdateFuture };
+    }
+
+    if (datesForRows.length > allRows.length) {
+      const extraPayloads = datesForRows.slice(allRows.length).map((dateKey) => ({
+        ...payloadAtual,
+        status: shouldKeepFutureStatus(payloadAtual.status),
         data_hora: buildDateTimeValue(dateKey, horaBase),
       }));
 
-      const { error: errInsertSerie } = await supabase
+      const { error: errInsertExtra } = await supabase
         .from("reunioes")
-        .insert(payloadSerie);
+        .insert(extraPayloads);
 
-      if (errInsertSerie) return { error: errInsertSerie };
+      if (errInsertExtra) return { error: errInsertExtra };
     }
 
     return { error: null };
