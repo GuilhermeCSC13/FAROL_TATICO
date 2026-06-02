@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
@@ -91,6 +92,7 @@ function parseNumberPtBr(raw) {
 }
 
 const OperacaoRotinas = () => {
+  const [searchParams] = useSearchParams();
   const [areas, setAreas] = useState([]);
   const [areaSelecionada, setAreaSelecionada] = useState(null);
   const [rotinas, setRotinas] = useState([]);
@@ -114,6 +116,17 @@ const OperacaoRotinas = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaSelecionada]);
 
+  useEffect(() => {
+    const areaParam = Number(searchParams.get("area"));
+    if (
+      areaParam &&
+      areas.some((area) => area.id === areaParam) &&
+      areaParam !== areaSelecionada
+    ) {
+      setAreaSelecionada(areaParam);
+    }
+  }, [searchParams, areas, areaSelecionada]);
+
   const fetchAreas = async () => {
     try {
       const { data, error } = await supabase
@@ -128,7 +141,11 @@ const OperacaoRotinas = () => {
         const filtered = data.filter((a) => a.id === ID_PCO || a.id === ID_MOTORISTAS);
         const lista = filtered.length > 0 ? filtered : data;
         setAreas(lista);
-        setAreaSelecionada(lista[0].id);
+        const areaParam = Number(searchParams.get("area"));
+        const targetArea = lista.some((a) => a.id === areaParam)
+          ? areaParam
+          : lista[0].id;
+        setAreaSelecionada(targetArea);
       }
     } catch (e) {
       console.error("Erro ao buscar áreas:", e);
@@ -435,7 +452,7 @@ const OperacaoRotinas = () => {
       {/* Cabeçalho (padrão) */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-800">Farol de Rotinas — Operação</h2>
+          <h2 className="text-xl font-bold text-gray-800">Farol de Rotinas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Subsetor"}</h2>
 
           {/* Baixar Farol */}
           <div className="relative">
@@ -498,7 +515,7 @@ const OperacaoRotinas = () => {
           </div>
 
           {/* Seletor de Áreas */}
-          <div className="flex space-x-2">
+          <div className="hidden">
             {areas.map((area) => (
               <button
                 key={area.id}

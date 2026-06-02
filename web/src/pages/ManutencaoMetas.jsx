@@ -481,7 +481,7 @@ const ManutencaoMetas = () => {
             </select>
           </div>
 
-          <div className="flex space-x-2">
+          <div className="hidden">
             {AREAS_MANUTENCAO.map((area) => (
               <button
                 key={area.id}

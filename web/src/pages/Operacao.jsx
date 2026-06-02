@@ -1,17 +1,28 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
-
 import OperacaoMetas from "./OperacaoMetas";
 import OperacaoRotinas from "./OperacaoRotinas";
 import OperacaoResumo from "./OperacaoResumo";
 
+const AREAS_OPERACAO = {
+  4: "PCO",
+  5: "Gestão de Motoristas",
+};
+
 const Operacao = () => {
-  const [aba, setAba] = useState("resumo"); // 'resumo' | 'metas' | 'rotinas'
+  const [aba, setAba] = useState("resumo");
+  const [searchParams] = useSearchParams();
+
+  const subsetor = useMemo(() => {
+    const area = searchParams.get("area") || "4";
+    return AREAS_OPERACAO[area] || "PCO";
+  }, [searchParams]);
 
   const renderContent = () => {
     if (aba === "metas") return <OperacaoMetas />;
     if (aba === "rotinas") return <OperacaoRotinas />;
-    return <OperacaoResumo />; // padrão: resumo
+    return <OperacaoResumo />;
   };
 
   const baseBtn =
@@ -23,14 +34,16 @@ const Operacao = () => {
   return (
     <Layout>
       <div className="h-full p-6 bg-slate-50 overflow-hidden flex flex-col">
-        {/* Cabeçalho + Botões de Navegação Interna */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-800">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">
               Operação
+            </p>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800">
+              {subsetor}
             </h1>
             <p className="text-xs text-slate-400">
-              Resumo, Farol de Metas e Farol de Rotinas da Operação.
+              Visão Geral, Farol de Metas e Farol de Rotinas apenas de {subsetor}.
             </p>
           </div>
 
@@ -42,7 +55,7 @@ const Operacao = () => {
                 aba === "resumo" ? activeBtn : inactiveBtn
               } rounded-none`}
             >
-              Resumo
+              Visão Geral
             </button>
             <button
               type="button"
@@ -65,7 +78,6 @@ const Operacao = () => {
           </div>
         </div>
 
-        {/* Conteúdo */}
         <div className="flex-1 min-h-0">{renderContent()}</div>
       </div>
     </Layout>

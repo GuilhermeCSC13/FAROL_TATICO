@@ -64,12 +64,13 @@ export default function AgendaDatePlanner({
   const primaryDate = normalizeDateKey(singleDate || normalizedDates[0] || new Date());
 
   useEffect(() => {
+    if (open) return;
     const next = normalizeDateKey(singleDate || normalizedDates[0] || "");
     if (!next) return;
     if (lastSyncedDateRef.current === next) return;
     lastSyncedDateRef.current = next;
     setCursor(parseSafeDate(next));
-  }, [singleDate, normalizedDates]);
+  }, [singleDate, normalizedDates, open]);
 
   useEffect(() => {
     if (mode === "multipla") {

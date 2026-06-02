@@ -28,6 +28,7 @@ import {
   X,
   Save,
   ShieldAlert,
+  Loader2,
 } from "lucide-react";
 import { salvarReuniao, atualizarReuniao } from "../services/agendaService";
 import { parseSafeDate } from "../services/agendaDates";
@@ -170,6 +171,7 @@ export default function CentralReunioes() {
   const [delLogin, setDelLogin] = useState("");
   const [delSenha, setDelSenha] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     titulo: "",
@@ -328,6 +330,8 @@ export default function CentralReunioes() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     const tipo = getTipoById(formData.tipo_reuniao_id);
     const tipoNome = tipo?.nome || "Geral";
 
@@ -402,6 +406,8 @@ export default function CentralReunioes() {
     } catch (err) {
       console.error(err);
       alert(err?.message ? `Erro ao salvar: ${err.message}` : "Erro ao salvar.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -868,7 +874,7 @@ export default function CentralReunioes() {
       {/* MODAL DETALHES */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-[min(96vw,1600px)] h-[94vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-[min(98vw,1800px)] h-[94vh] flex flex-col overflow-hidden">
             <div className="bg-white px-6 sm:px-8 py-4 sm:py-5 border-b flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold text-slate-800">
                 {editingReuniao ? "Editar Reunião" : "Nova Reunião"}
@@ -900,17 +906,27 @@ export default function CentralReunioes() {
             <div className="bg-slate-50 p-4 sm:p-5 border-t flex justify-end gap-3 shrink-0">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-6 py-2 text-slate-500 font-bold"
+                className="px-6 py-2 text-slate-500 font-bold disabled:opacity-50"
                 type="button"
+                disabled={saving}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 form="form-reuniao"
-                className="px-10 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 active:scale-95 transition-all"
+                disabled={saving}
+                className="px-10 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Save size={18} /> Salvar Alterações
+                {saving ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} /> Salvar Alterações
+                  </>
+                )}
               </button>
             </div>
           </div>

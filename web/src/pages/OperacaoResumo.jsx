@@ -240,7 +240,7 @@ const OperacaoResumo = () => {
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">
-            Visão Geral — Operação
+            Visão Geral — {areaLabel}
           </h2>
           <p className="text-sm text-gray-500">
             Acompanhamento consolidado de performance —{' '}
