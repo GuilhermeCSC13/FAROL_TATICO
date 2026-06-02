@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { exportFullElementAsImage, formatFarolValue } from "../utils/farolUtils";
 import { useSearchParams } from "react-router-dom";
 import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
@@ -434,26 +435,14 @@ const AdministrativoMetas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-      const el = tableWrapRef.current;
-      if (!el) return;
+      const areaName = areas.find((a) => a.id === areaSelecionada)?.nome || "Administrativo";
 
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
+      await exportFullElementAsImage({
+        element: tableWrapRef.current,
+        html2canvas,
+        fileName: `Farol_${areaName}_2026`,
+        format,
       });
-
-      const mime = format === "jpg" ? "image/jpeg" : "image/png";
-      const ext = format === "jpg" ? "jpg" : "png";
-      const dataUrl = canvas.toDataURL(mime, format === "jpg" ? 0.92 : undefined);
-
-      const a = document.createElement("a");
-      const areaName =
-        areas.find((a) => a.id === areaSelecionada)?.nome || "Administrativo";
-
-      a.href = dataUrl;
-      a.download = `Farol_${areaName}_2026.${ext}`;
-      a.click();
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
@@ -462,12 +451,11 @@ const AdministrativoMetas = () => {
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
       <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">
-            Farol de Metas — Administrativo
-          </h2>
+        <h2 className="text-lg font-black tracking-tight text-slate-900">
+          Farol de Metas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Administrativo"}
+        </h2>
 
-          {/* Baixar Farol */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -496,25 +484,6 @@ const AdministrativoMetas = () => {
               </div>
             )}
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => (window.location.hash = "rotinas")}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-gray-200 rounded"
-            >
-              Ir para Rotinas
-            </button>
-
-            <button
-              onClick={() => setShowConfig(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
-              title="Configurações"
-            >
-              <Settings size={18} />
-            </button>
-          </div>
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
@@ -532,21 +501,13 @@ const AdministrativoMetas = () => {
             </select>
           </div>
 
-          <div className="hidden">
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                onClick={() => setAreaSelecionada(area.id)}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 ${
-                  areaSelecionada === area.id
-                    ? "border-blue-600 text-blue-700 bg-blue-50"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {area.nome}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowConfig(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
+            title="Configurações"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </div>
 
@@ -630,7 +591,7 @@ const AdministrativoMetas = () => {
                                 className="w-full text-center bg-transparent font-bold text-gray-800 text-xs focus:outline-none h-full pb-1 focus:bg-white/50"
                                 placeholder="-"
                                 defaultValue={
-                                  valorRealizado === "" ? "" : String(valorRealizado)
+                                  valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)
                                 }
                                 onBlur={(e) =>
                                   handleSave(meta.id, 14, e.target.value, meta)
@@ -687,7 +648,7 @@ const AdministrativoMetas = () => {
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
                               {dados.alvo !== null && dados.alvo !== undefined
-                                ? Number(dados.alvo).toFixed(2)
+                                ? formatFarolValue(dados.alvo, row.unidade)
                                 : ""}
                             </div>
 
@@ -697,7 +658,7 @@ const AdministrativoMetas = () => {
                               className="w-full text-center bg-transparent font-bold text-xs focus:bg-white/50"
                               placeholder="-"
                               defaultValue={
-                                valorRealizado === "" ? "" : String(valorRealizado)
+                                valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)
                               }
                               onBlur={(e) =>
                                 handleSave(meta.id, mes.id, e.target.value, meta)

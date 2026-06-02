@@ -5,6 +5,7 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { exportFullElementAsImage, formatFarolValue } from "../utils/farolUtils";
 
 // IDs das áreas Administrativo (Financeiro + Pessoas)
 const IDS_ADMIN = [7, 8];
@@ -425,26 +426,14 @@ const AdministrativoRotinas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-
-      const el = tableWrapRef.current;
-      if (!el) return;
-
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-      });
-
-      const mime = format === "jpg" ? "image/jpeg" : "image/png";
-      const ext = format === "jpg" ? "jpg" : "png";
-
-      const dataUrl = canvas.toDataURL(mime, format === "jpg" ? 0.92 : undefined);
-      const a = document.createElement("a");
-
       const areaName = areas.find((a) => a.id === areaSelecionada)?.nome || "Administrativo";
-      a.href = dataUrl;
-      a.download = `FarolRotinas_${areaName}_2026.${ext}`;
-      a.click();
+
+      await exportFullElementAsImage({
+        element: tableWrapRef.current,
+        html2canvas,
+        fileName: `FarolRotinas_${areaName}_2026`,
+        format,
+      });
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
@@ -452,12 +441,12 @@ const AdministrativoRotinas = () => {
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
-      {/* Cabeçalho (padrão) */}
       <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">Farol de Rotinas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Subsetor"}</h2>
+        <h2 className="text-lg font-black tracking-tight text-slate-900">
+          Farol de Rotinas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Subsetor"}
+        </h2>
 
-          {/* Baixar Farol */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -487,7 +476,6 @@ const AdministrativoRotinas = () => {
             )}
           </div>
 
-          {/* Filtro de Responsável */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
             <select
@@ -496,47 +484,24 @@ const AdministrativoRotinas = () => {
               className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos</option>
-              {responsaveisUnicos.map((resp) => (
-                <option key={resp} value={resp}>
-                  {resp}
+              {responsaveisUnicos.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome}
                 </option>
               ))}
             </select>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Config */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowConfig(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
-              title="Configurações"
-            >
-              <Settings size={18} />
-            </button>
-          </div>
-
-          {/* Seletor de Áreas */}
-          <div className="hidden">
-            {areas.map((area) => (
-              <button
-                key={area.id}
-                onClick={() => setAreaSelecionada(area.id)}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
-                  areaSelecionada === area.id
-                    ? "border-blue-600 text-blue-700 bg-blue-50"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {area.nome}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowConfig(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
+            title="Configurações"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </div>
 
-      {/* Tabela */}
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500 animate-pulse">Carregando dados...</div>
@@ -626,7 +591,7 @@ const AdministrativoRotinas = () => {
                                   inputMode="decimal"
                                   className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
                                   placeholder="-"
-                                  defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
+                                  defaultValue={valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)}
                                   onBlur={(e) => handleSave(row.id, 14, e.target.value, row)}
                                 />
                               </div>
@@ -683,7 +648,7 @@ const AdministrativoRotinas = () => {
                             <div className="flex flex-col h-full justify-between">
                               <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
                                 {dados?.alvo !== null && dados?.alvo !== undefined
-                                  ? Number(dados.alvo).toFixed(2)
+                                  ? formatFarolValue(dados.alvo, row.unidade)
                                   : ""}
                               </div>
 
@@ -692,7 +657,7 @@ const AdministrativoRotinas = () => {
                                 inputMode="decimal"
                                 className="w-full text-center bg-transparent font-bold text-gray-800 text-[11px] focus:outline-none h-full focus:bg-white/50 transition-colors"
                                 placeholder="-"
-                                defaultValue={valorRealizado === "" ? "" : String(valorRealizado)}
+                                defaultValue={valorRealizado === "" ? "" : formatFarolValue(valorRealizado, row.unidade)}
                                 onBlur={(e) => handleSave(row.id, mes.id, e.target.value, row)}
                               />
                             </div>

@@ -6,6 +6,7 @@ import {
 import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide-react';
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
 import { useSearchParams } from 'react-router-dom';
+import { getMesAtualFarol } from '../utils/farolUtils';
 
 // Meses usados no seletor e nos textos
 const MESES = [
@@ -29,7 +30,7 @@ const OperacaoResumo = () => {
   const [showConfig, setShowConfig] = useState(false);
 
   // Novo: filtro de mês e de área
-  const [mesSelecionado, setMesSelecionado] = useState(1);      // 1 = Jan/26
+  const [mesSelecionado, setMesSelecionado] = useState(getMesAtualFarol())
   const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || '4');          // '4' | '5'
 
   const [metrics, setMetrics] = useState({

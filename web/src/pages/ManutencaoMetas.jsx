@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { exportFullElementAsImage, formatFarolValue } from "../utils/farolUtils";
 import { useSearchParams } from "react-router-dom";
 import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
@@ -387,30 +388,14 @@ const ManutencaoMetas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-      const el = tableWrapRef.current;
-      if (!el) return;
+      const areaName = areas.find((a) => a.id === areaSelecionada)?.nome || "Gestao_de_Frota";
 
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
+      await exportFullElementAsImage({
+        element: tableWrapRef.current,
+        html2canvas,
+        fileName: `Farol_${areaName}_2026`,
+        format,
       });
-
-      const mime = format === "jpg" ? "image/jpeg" : "image/png";
-      const ext = format === "jpg" ? "jpg" : "png";
-      const dataUrl = canvas.toDataURL(
-        mime,
-        format === "jpg" ? 0.92 : undefined
-      );
-
-      const a = document.createElement("a");
-      const areaName =
-        AREAS_MANUTENCAO.find((a) => a.id === areaSelecionada)?.nome ||
-        "Gestao_de_Frota";
-
-      a.href = dataUrl;
-      a.download = `Farol_${areaName}_2026.${ext}`;
-      a.click();
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
@@ -419,11 +404,11 @@ const ManutencaoMetas = () => {
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
       <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-black tracking-tight text-slate-900">
-            Farol de Metas — Gestão de Frota
-          </h2>
+        <h2 className="text-lg font-black tracking-tight text-slate-900">
+          Farol de Metas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Gestão de Frota"}
+        </h2>
 
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
@@ -452,18 +437,6 @@ const ManutencaoMetas = () => {
               </div>
             )}
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowConfig(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
-              title="Configurações"
-            >
-              <Settings size={18} />
-            </button>
-          </div>
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
@@ -481,21 +454,13 @@ const ManutencaoMetas = () => {
             </select>
           </div>
 
-          <div className="hidden">
-            {AREAS_MANUTENCAO.map((area) => (
-              <button
-                key={area.id}
-                onClick={() => setAreaSelecionada(area.id)}
-                className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 ${
-                  areaSelecionada === area.id
-                    ? "border-blue-600 text-blue-700 bg-blue-50"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {area.nome}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setShowConfig(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
+            title="Configurações"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </div>
 
@@ -585,7 +550,7 @@ const ManutencaoMetas = () => {
                                 defaultValue={
                                   valorRealizado === ""
                                     ? ""
-                                    : String(valorRealizado)
+                                    : formatFarolValue(valorRealizado, row.unidade)
                                 }
                                 onBlur={(e) =>
                                   handleSave(meta.id, 14, e.target.value, meta)
@@ -645,7 +610,7 @@ const ManutencaoMetas = () => {
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[10px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40 leading-3">
                               {dados.alvo !== null && dados.alvo !== undefined
-                                ? Number(dados.alvo).toFixed(2)
+                                ? formatFarolValue(dados.alvo, row.unidade)
                                 : ""}
                             </div>
 
@@ -657,7 +622,7 @@ const ManutencaoMetas = () => {
                               defaultValue={
                                 valorRealizado === ""
                                   ? ""
-                                  : String(valorRealizado)
+                                  : formatFarolValue(valorRealizado, row.unidade)
                               }
                               onBlur={(e) =>
                                 handleSave(meta.id, mes.id, e.target.value, meta)
