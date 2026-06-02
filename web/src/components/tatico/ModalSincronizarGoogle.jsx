@@ -284,9 +284,20 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
               )}
               <div className="text-sm">
                 <div className="font-bold text-slate-800">
-                  {resultado.okCount} reuni{resultado.okCount === 1 ? "ão" : "ões"} enviada
-                  {resultado.okCount === 1 ? "" : "s"} pro Google.
+                  {resultado.okCount} reuni{resultado.okCount === 1 ? "ão" : "ões"} sincronizada
+                  {resultado.okCount === 1 ? "" : "s"} com sucesso.
                 </div>
+                {(resultado.createdCount > 0 || resultado.updatedCount > 0) && (
+                  <div className="text-slate-600 mt-1 text-xs">
+                    {resultado.createdCount > 0 && (
+                      <>{resultado.createdCount} criada{resultado.createdCount === 1 ? "" : "s"}</>
+                    )}
+                    {resultado.createdCount > 0 && resultado.updatedCount > 0 && <> · </>}
+                    {resultado.updatedCount > 0 && (
+                      <>{resultado.updatedCount} atualizada{resultado.updatedCount === 1 ? "" : "s"}</>
+                    )}
+                  </div>
+                )}
                 {resultado.errCount > 0 && (
                   <div className="text-amber-700 mt-1">
                     {resultado.errCount} falha{resultado.errCount === 1 ? "" : "s"} —{" "}

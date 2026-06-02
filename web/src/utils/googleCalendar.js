@@ -122,12 +122,119 @@ export async function ensureGoogleToken({ forcePrompt = false } = {}) {
   });
 }
 
+// ── Helpers de data/hora ───────────────────────────────────────────────
+// O Farol grava `data_hora` como uma string ISO mas exibe sempre o trecho
+// após o "T" como wall-clock local de SP (ignora qualquer offset). Pra ficar
+// idêntico no Google, extraímos data e hora como strings e enviamos com
+// timeZone=America/Sao_Paulo (sem deixar o JS converter pra UTC).
+function splitDataHora(value) {
+  if (!value) return null;
+  const s = String(value);
+  if (s.includes("T")) {
+    const [datePart, timeFull = "00:00:00"] = s.split("T");
+    const timePart = timeFull.substring(0, 8).padEnd(8, "0:00:00".slice(timeFull.length, 8));
+    return { date: datePart, time: timePart.length === 5 ? `${timePart}:00` : timePart };
+  }
+  if (s.includes(" ")) {
+    const [datePart, timeFull = "00:00:00"] = s.split(" ");
+    return { date: datePart, time: timeFull.substring(0, 8) };
+  }
+  return null;
+}
+
+function combinarDataHora(dataISO, horaStr) {
+  // dataISO ex.: "2026-06-03T09:00:00+00:00"  → pega só a data
+  // horaStr  ex.: "09:00" ou "09:00:00"
+  const parts = splitDataHora(dataISO);
+  if (!parts) return null;
+  const t = String(horaStr || "").substring(0, 8);
+  const hora = t.length === 5 ? `${t}:00` : t;
+  return `${parts.date}T${hora}`;
+}
+
+function addMinutosWallClock(dateTimeLocal, minutos) {
+  // Suma minutos mantendo SP como referência (evita problemas de DST etc.)
+  const [datePart, timePart] = String(dateTimeLocal).split("T");
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [hh, mm, ss = "00"] = timePart.split(":");
+  const base = new Date(Date.UTC(y, m - 1, d, Number(hh), Number(mm), Number(ss)));
+  base.setUTCMinutes(base.getUTCMinutes() + minutos);
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}` +
+    `T${pad(base.getUTCHours())}:${pad(base.getUTCMinutes())}:${pad(base.getUTCSeconds())}`
+  );
+}
+
+function resolveStartEnd(reuniao) {
+  // Start: prioridade horario_inicio combinado com a data, senão data_hora cru
+  let start = null;
+  const parts = splitDataHora(reuniao.data_hora);
+  if (reuniao.horario_inicio && parts) {
+    start = combinarDataHora(reuniao.data_hora, reuniao.horario_inicio);
+  } else if (parts) {
+    start = `${parts.date}T${parts.time}`;
+  }
+
+  let end = null;
+  if (reuniao.horario_fim && parts) {
+    end = combinarDataHora(reuniao.data_hora, reuniao.horario_fim);
+  }
+  if (!end && start) {
+    end = addMinutosWallClock(start, 60); // default 1h
+  }
+  return { start, end };
+}
+
+// ── Mapeamento de cor do Farol → colorId do Google Calendar ─────────────
+// Paleta oficial do Google (event colors). Aproximamos pela menor distância
+// no espaço RGB.
+const GOOGLE_EVENT_COLORS = [
+  { id: "1", hex: "#7986cb" }, // Lavender
+  { id: "2", hex: "#33b679" }, // Sage
+  { id: "3", hex: "#8e24aa" }, // Grape
+  { id: "4", hex: "#e67c73" }, // Flamingo
+  { id: "5", hex: "#f6c026" }, // Banana
+  { id: "6", hex: "#f5511d" }, // Tangerine
+  { id: "7", hex: "#039be5" }, // Peacock
+  { id: "8", hex: "#616161" }, // Graphite
+  { id: "9", hex: "#3f51b5" }, // Blueberry
+  { id: "10", hex: "#0b8043" }, // Basil
+  { id: "11", hex: "#d50000" }, // Tomato
+];
+
+function hexToRgb(hex) {
+  if (!hex) return null;
+  let h = String(hex).replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  if (h.length !== 6) return null;
+  const n = parseInt(h, 16);
+  if (Number.isNaN(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function nearestGoogleColorId(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return undefined;
+  let best = null;
+  let bestDist = Infinity;
+  for (const c of GOOGLE_EVENT_COLORS) {
+    const t = hexToRgb(c.hex);
+    const dr = rgb.r - t.r;
+    const dg = rgb.g - t.g;
+    const db = rgb.b - t.b;
+    const dist = dr * dr + dg * dg + db * db;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = c.id;
+    }
+  }
+  return best;
+}
+
 // Monta o payload de evento a partir da reunião do Farol
-function reuniaoToEvent(reuniao, tipoNome) {
-  const start = reuniao.horario_inicio || reuniao.data_hora;
-  const end =
-    reuniao.horario_fim ||
-    (start ? new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString() : null);
+function reuniaoToEvent(reuniao, tipoNome, tipoCor) {
+  const { start, end } = resolveStartEnd(reuniao);
 
   const titulo = reuniao.titulo || tipoNome || "Reunião";
   const descricao = [
@@ -139,11 +246,13 @@ function reuniaoToEvent(reuniao, tipoNome) {
     .filter(Boolean)
     .join("\n");
 
+  const colorId = nearestGoogleColorId(tipoCor || reuniao.cor);
+
   const event = {
     summary: titulo,
     description: descricao,
-    start: { dateTime: new Date(start).toISOString(), timeZone: "America/Sao_Paulo" },
-    end: { dateTime: new Date(end).toISOString(), timeZone: "America/Sao_Paulo" },
+    start: { dateTime: start, timeZone: "America/Sao_Paulo" },
+    end: { dateTime: end, timeZone: "America/Sao_Paulo" },
     source: { title: "Farol Tático", url: window.location.origin },
     extendedProperties: {
       private: {
@@ -151,14 +260,51 @@ function reuniaoToEvent(reuniao, tipoNome) {
       },
     },
   };
+  if (colorId) event.colorId = colorId;
   return event;
 }
 
-// Cria 1 evento. Retorna { ok, eventId, error }
-export async function createCalendarEvent(reuniao, tipoNome) {
+// Busca um evento já criado pra essa reunião. Retorna o eventId ou null.
+async function findExistingEventId(accessToken, reuniaoId) {
+  const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+  url.searchParams.set("privateExtendedProperty", `farol_reuniao_id=${reuniaoId}`);
+  url.searchParams.set("maxResults", "1");
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("showDeleted", "false");
+  const r = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data?.items?.[0]?.id || null;
+}
+
+// Cria ou atualiza 1 evento. Retorna { ok, eventId, action, error }
+export async function upsertCalendarEvent(reuniao, tipoNome, tipoCor) {
   try {
     const token = await ensureGoogleToken();
-    const event = reuniaoToEvent(reuniao, tipoNome);
+    const existingId = await findExistingEventId(token.access_token, reuniao.id);
+    const event = reuniaoToEvent(reuniao, tipoNome, tipoCor);
+
+    if (existingId) {
+      const r = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(existingId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(event),
+        }
+      );
+      if (!r.ok) {
+        const text = await r.text();
+        return { ok: false, error: `HTTP ${r.status}: ${text}` };
+      }
+      return { ok: true, eventId: existingId, action: "updated" };
+    }
+
     const r = await fetch(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events",
       {
@@ -175,28 +321,38 @@ export async function createCalendarEvent(reuniao, tipoNome) {
       return { ok: false, error: `HTTP ${r.status}: ${text}` };
     }
     const created = await r.json();
-    return { ok: true, eventId: created.id };
+    return { ok: true, eventId: created.id, action: "created" };
   } catch (e) {
     return { ok: false, error: e.message || String(e) };
   }
 }
+
+// compat: createCalendarEvent agora é alias do upsert
+export const createCalendarEvent = (r, t, c) => upsertCalendarEvent(r, t, c);
 
 // Sincroniza um lote. Chama onProgress({ done, total, titulo, ok }) a cada item.
 export async function syncReunioesToGoogle(reunioes, tiposById, onProgress) {
   const total = reunioes.length;
   let done = 0;
   let okCount = 0;
+  let createdCount = 0;
+  let updatedCount = 0;
   let errCount = 0;
   const errors = [];
 
   await ensureGoogleToken();
 
   for (const r of reunioes) {
-    const tipoNome = tiposById?.[r.tipo_reuniao_id]?.nome || r.tipos_reuniao?.nome || "";
-    const res = await createCalendarEvent(r, tipoNome);
+    const tipo = tiposById?.[r.tipo_reuniao_id] || r.tipos_reuniao || {};
+    const tipoNome = tipo?.nome || "";
+    const tipoCor = tipo?.cor || r.cor || null;
+    const res = await upsertCalendarEvent(r, tipoNome, tipoCor);
     done++;
-    if (res.ok) okCount++;
-    else {
+    if (res.ok) {
+      okCount++;
+      if (res.action === "updated") updatedCount++;
+      else createdCount++;
+    } else {
       errCount++;
       errors.push({ titulo: r.titulo, error: res.error });
     }
@@ -205,5 +361,5 @@ export async function syncReunioesToGoogle(reunioes, tiposById, onProgress) {
     }
   }
 
-  return { total, okCount, errCount, errors };
+  return { total, okCount, createdCount, updatedCount, errCount, errors };
 }
