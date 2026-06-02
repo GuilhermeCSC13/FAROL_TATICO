@@ -2,11 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-html {
-  /* Zoom global travado em 75% pra padronizar com o Inove. */
-  zoom: 0.75;
-}
-
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
