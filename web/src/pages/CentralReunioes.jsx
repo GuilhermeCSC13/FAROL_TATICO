@@ -35,6 +35,7 @@ import { parseSafeDate } from "../services/agendaDates";
 import { sortUniqueDates } from "../services/agendaDates";
 import DetalhesReuniao from "../components/tatico/DetalhesReuniao";
 import ModalSincronizarGoogle from "../components/tatico/ModalSincronizarGoogle";
+import { deleteCalendarEventByReuniaoId } from "../utils/googleCalendar";
 
 const SENHA_EXCLUSAO = "KM2026";
 
@@ -338,6 +339,9 @@ export default function CentralReunioes() {
 
       if (error) throw error;
 
+      // Tenta apagar do Google Agenda (silencioso se não estiver conectado)
+      deleteCalendarEventByReuniaoId(editingReuniao.id).catch(() => {});
+
       setFormData((prev) => ({ ...prev, status: "Cancelada" }));
       await fetchReunioes();
       alert("Reunião cancelada (mantida no histórico).");
@@ -466,11 +470,15 @@ export default function CentralReunioes() {
         return;
       }
 
+      const deletedReuniaoId = editingReuniao.id;
       const { error: errDel } = await supabase
         .from("reunioes")
         .delete()
-        .eq("id", editingReuniao.id);
+        .eq("id", deletedReuniaoId);
       if (errDel) throw errDel;
+
+      // Tenta apagar do Google Agenda (silencioso se não estiver conectado)
+      deleteCalendarEventByReuniaoId(deletedReuniaoId).catch(() => {});
 
       alert("Reunião excluída com sucesso.");
       setShowDeleteAuth(false);
