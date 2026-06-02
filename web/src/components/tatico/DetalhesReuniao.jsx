@@ -1,7 +1,7 @@
 // src/components/tatico/DetalhesReuniao.jsx
 import React, { useMemo, useEffect, useState } from "react";
+import AgendaDatePlanner from "./AgendaDatePlanner";
 import {
-  Calendar,
   Clock,
   AlignLeft,
   FileText,
@@ -418,6 +418,12 @@ export default function DetalhesReuniao({
 
   // ✅ NOVO: detectar cancelada (pra travar tudo, igual Realizada)
   const isCancelada = String(formData.status || "").toLowerCase().includes("cancel");
+  const agendaMode = formData.agenda_mode || "unica";
+  const agendaDates = Array.isArray(formData.datas_selecionadas)
+    ? formData.datas_selecionadas
+    : formData.data
+    ? [formData.data]
+    : [];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 relative">
@@ -517,25 +523,21 @@ export default function DetalhesReuniao({
             />
           </div>
 
+          <AgendaDatePlanner
+            label="Data e recorrência"
+            helperText="Escolha uma data mais elegante, ou transforme a reunião em uma agenda múltipla."
+            mode={agendaMode}
+            onModeChange={(value) => handleChange("agenda_mode", value)}
+            singleDate={formData.data || ""}
+            onSingleDateChange={(value) => handleChange("data", value)}
+            selectedDates={agendaDates}
+            onSelectedDatesChange={(values) => handleChange("datas_selecionadas", values)}
+            recurrenceRule={formData.recurrence_rule || "semanal"}
+            onRecurrenceRuleChange={(value) => handleChange("recurrence_rule", value)}
+            disabled={isRealizada || isCancelada}
+          />
+
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Data
-              </label>
-              <div className="relative">
-                <Calendar
-                  className="absolute left-3 top-2.5 text-slate-400"
-                  size={16}
-                />
-                <input
-                  type="date"
-                  disabled={isRealizada || isCancelada}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3 py-2 text-sm outline-none disabled:opacity-60"
-                  value={formData.data}
-                  onChange={(e) => handleChange("data", e.target.value)}
-                />
-              </div>
-            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Hora (início)

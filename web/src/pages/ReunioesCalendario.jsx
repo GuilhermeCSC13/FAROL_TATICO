@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/tatico/Layout';
 import { supabase } from '../supabaseClient';
+import AgendaDatePlanner from "../components/tatico/AgendaDatePlanner";
+import { atualizarReuniao } from "../services/agendaService";
+import { sortUniqueDates } from "../services/agendaDates";
 import { 
   ChevronLeft, ChevronRight, Calendar as CalIcon, 
   List, Grid, X, Clock, Edit2, ArrowRight 
@@ -22,7 +25,13 @@ const ReunioesCalendario = () => {
   // Estado do Modal de Edição Rápida
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [editForm, setEditForm] = useState({ date: '', time: '' });
+  const [editForm, setEditForm] = useState({
+    date: '',
+    time: '',
+    mode: 'unica',
+    dates: [],
+    rule: 'semanal',
+  });
 
   // Drag & Drop
   const [draggingEvent, setDraggingEvent] = useState(null);
@@ -68,10 +77,14 @@ const ReunioesCalendario = () => {
   const handleEventClick = (e, evento) => {
     e.stopPropagation();
     const dt = new Date(evento.data_hora);
+    const dateKey = dt.toISOString().split('T')[0];
     setSelectedEvent(evento);
     setEditForm({
-      date: dt.toISOString().split('T')[0],
+      date: dateKey,
       time: dt.toTimeString().substring(0, 5),
+      mode: 'unica',
+      dates: [dateKey],
+      rule: 'semanal',
     });
     setModalOpen(true);
   };
@@ -80,22 +93,31 @@ const ReunioesCalendario = () => {
     if (!selectedEvent) return;
 
     const novaData = `${editForm.date}T${editForm.time}:00`;
-    const novaDataHora = new Date(novaData);
-    const novaIso = novaDataHora.toISOString();
+    const agendaMode = editForm.mode || 'unica';
+    const rawDates =
+      Array.isArray(editForm.dates) && editForm.dates.length > 0
+        ? editForm.dates
+        : [editForm.date];
+    const datasSelecionadas =
+      agendaMode === 'multipla'
+        ? sortUniqueDates(rawDates)
+        : [editForm.date];
 
-    const { error } = await supabase
-      .from('reunioes')
-      .update({ data_hora: novaIso })
-      .eq('id', selectedEvent.id);
+    const { error } = await atualizarReuniao(
+      selectedEvent.id,
+      { data_hora: novaData },
+      {
+        mode: agendaMode,
+        selectedDates: datasSelecionadas,
+        rule: editForm.rule || 'semanal',
+        count: 6,
+        timeValue: editForm.time,
+      }
+    );
 
     if (!error) {
       setModalOpen(false);
-      // Atualiza localmente para evitar outro fetch
-      setReunioes((prev) =>
-        prev.map((r) =>
-          r.id === selectedEvent.id ? { ...r, data_hora: novaIso } : r
-        )
-      );
+      await fetchReunioesPeriodo();
     } else {
       alert('Erro ao remarcar.');
     }
@@ -590,19 +612,25 @@ const ReunioesCalendario = () => {
                 </h2>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                      Remarcar Data
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-100 outline-none"
-                      value={editForm.date}
-                      onChange={(e) =>
-                        setEditForm({ ...editForm, date: e.target.value })
-                      }
-                    />
-                  </div>
+                  <AgendaDatePlanner
+                    label="Remarcar agenda"
+                    helperText="Use uma data única ou selecione várias datas com atalhos."
+                    mode={editForm.mode}
+                    onModeChange={(value) => setEditForm((prev) => ({ ...prev, mode: value }))}
+                    singleDate={editForm.date}
+                    onSingleDateChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, date: value }))
+                    }
+                    selectedDates={editForm.dates}
+                    onSelectedDatesChange={(values) =>
+                      setEditForm((prev) => ({ ...prev, dates: values }))
+                    }
+                    recurrenceRule={editForm.rule}
+                    onRecurrenceRuleChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, rule: value }))
+                    }
+                  />
+
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                       Remarcar Horário
@@ -636,6 +664,12 @@ const ReunioesCalendario = () => {
                     className="flex-1 bg-gray-800 text-white py-2.5 rounded-lg font-bold hover:bg-gray-900 transition-colors text-sm"
                   >
                     Salvar Mudança
+                  </button>
+                  <button
+                    onClick={() => navigate(`/central-reunioes?editId=${selectedEvent.id}`)}
+                    className="flex-1 bg-white text-slate-700 border border-slate-200 py-2.5 rounded-lg font-bold hover:bg-slate-50 transition-colors text-sm flex items-center justify-center gap-2"
+                  >
+                    Edição completa
                   </button>
                   <button
                     onClick={irParaDetalhes}
