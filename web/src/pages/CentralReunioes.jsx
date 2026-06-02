@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Layout from "../components/tatico/Layout";
 import { supabase, supabaseInove } from "../supabaseClient";
+import { useLocation } from "react-router-dom";
 import {
   format,
   startOfMonth,
@@ -29,6 +30,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { salvarReuniao, atualizarReuniao } from "../services/agendaService";
+import { sortUniqueDates } from "../services/agendaDates";
 import DetalhesReuniao from "../components/tatico/DetalhesReuniao";
 
 const SENHA_EXCLUSAO = "KM2026";
@@ -135,6 +137,8 @@ async function salvarParticipantesManuais(reuniaoId, participantes) {
 }
 
 export default function CentralReunioes() {
+  const location = useLocation();
+  const editId = new URLSearchParams(location.search).get("editId");
   const [view, setView] = useState("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [reunioes, setReunioes] = useState([]);
@@ -142,6 +146,7 @@ export default function CentralReunioes() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReuniao, setEditingReuniao] = useState(null);
+  const [queryEditHandledId, setQueryEditHandledId] = useState("");
 
   // Estados para Exclusão Segura
   const [showDeleteAuth, setShowDeleteAuth] = useState(false);
@@ -161,6 +166,9 @@ export default function CentralReunioes() {
     status: "Agendada",
     materiais: [],
     participantes_manuais: [], // ✅ NOVO
+    agenda_mode: "unica",
+    datas_selecionadas: [],
+    recurrence_rule: "semanal",
   });
 
   const [draggingReuniao, setDraggingReuniao] = useState(null);
@@ -200,10 +208,11 @@ export default function CentralReunioes() {
 
   const onDateClick = (day) => {
     setEditingReuniao(null);
+    const dateKey = format(day, "yyyy-MM-dd");
     setFormData({
       titulo: "",
       tipo_reuniao_id: "",
-      data: format(day, "yyyy-MM-dd"),
+      data: dateKey,
       hora_inicio: "09:00",
       hora_fim: "10:00",
       cor: "#3B82F6",
@@ -212,6 +221,9 @@ export default function CentralReunioes() {
       status: "Agendada",
       materiais: [],
       participantes_manuais: [], // ✅ NOVO
+      agenda_mode: "unica",
+      datas_selecionadas: [dateKey],
+      recurrence_rule: "semanal",
     });
     setIsModalOpen(true);
   };
@@ -247,6 +259,15 @@ export default function CentralReunioes() {
   };
 
   // ✅ NOVO: Cancelar reunião (não some; mantém histórico)
+  useEffect(() => {
+    if (!editId || isModalOpen || editId === queryEditHandledId || reunioes.length === 0) return;
+    const target = reunioes.find((r) => String(r.id) === String(editId));
+    if (target) {
+      handleEdit(target);
+      setQueryEditHandledId(editId);
+    }
+  }, [editId, reunioes, isModalOpen, queryEditHandledId]);
+
   const cancelarReuniao = async () => {
     if (!editingReuniao?.id) return;
 
@@ -283,6 +304,16 @@ export default function CentralReunioes() {
       formData.hora_inicio,
       formData.hora_fim
     );
+    const agendaMode = formData.agenda_mode || "unica";
+    const rawDates =
+      Array.isArray(formData.datas_selecionadas) &&
+      formData.datas_selecionadas.length > 0
+        ? formData.datas_selecionadas
+        : [formData.data];
+    const datasSelecionadas =
+      agendaMode === "multipla"
+        ? sortUniqueDates(rawDates)
+        : [formData.data];
 
     const dados = {
       titulo: formData.titulo,
@@ -302,27 +333,33 @@ export default function CentralReunioes() {
 
     try {
       if (editingReuniao) {
-        // Se já foi realizada, salva direto. Se não, pergunta.
-        const aplicar =
-          formData.status === "Realizada"
-            ? false
-            : window.confirm(
-                "Deseja aplicar as mudanças para reuniões futuras desta série?"
-              );
-
-        const { error } = await atualizarReuniao(editingReuniao.id, dados, aplicar);
+        const { error } = await atualizarReuniao(editingReuniao.id, dados, {
+          mode: agendaMode,
+          selectedDates: datasSelecionadas,
+          rule: formData.recurrence_rule || "semanal",
+          count: 6,
+          timeValue: formData.hora_inicio,
+        });
         if (error) throw error;
       } else {
         // ✅ precisa retornar data com id (select().single()) no agendaService
-        const { data, error } = await salvarReuniao(dados, "unica");
+        const { data, error } = await salvarReuniao(dados, {
+          mode: agendaMode,
+          selectedDates: datasSelecionadas,
+          rule: formData.recurrence_rule || "semanal",
+          count: 6,
+          timeValue: formData.hora_inicio,
+        });
         if (error) throw error;
 
-        const reuniaoId = data?.id || data?.[0]?.id;
-        if (reuniaoId) {
-          await salvarParticipantesManuais(
-            reuniaoId,
-            formData.participantes_manuais
-          );
+        const reunioesCriadas = Array.isArray(data) ? data : [data];
+        for (const item of reunioesCriadas) {
+          if (item?.id) {
+            await salvarParticipantesManuais(
+              item.id,
+              formData.participantes_manuais
+            );
+          }
         }
       }
 

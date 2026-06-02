@@ -1,20 +1,35 @@
 import { addDays, addMonths } from "date-fns";
 import { supabase } from "../supabaseClient";
+import {
+  buildDateTimeValue,
+  extractTimeValue,
+  generateRecurringDates,
+  sortUniqueDates,
+} from "./agendaDates";
 
 export const gerarDatasRecorrentes = (dataInicialISO, regra, qtd = 12) => {
   const datas = [];
   let dataBase = new Date(dataInicialISO);
 
-  for (let i = 0; i < qtd; i++) {
+  for (let i = 0; i < qtd; i += 1) {
     datas.push(new Date(dataBase));
     if (regra === "semanal") dataBase = addDays(dataBase, 7);
     if (regra === "quinzenal") dataBase = addDays(dataBase, 15);
     if (regra === "mensal") dataBase = addMonths(dataBase, 1);
   }
+
   return datas;
 };
 
-export const salvarReuniao = async (dados, regraRecorrencia) => {
+function parseRecurrenceConfig(recorrencia) {
+  if (typeof recorrencia === "string") {
+    return { mode: recorrencia };
+  }
+
+  return recorrencia || {};
+}
+
+function buildBasePayload(dados) {
   const {
     titulo,
     data_hora,
@@ -26,10 +41,10 @@ export const salvarReuniao = async (dados, regraRecorrencia) => {
     tipo_reuniao_id,
     tipo_reuniao_legacy,
     duracao_segundos,
-    materiais, // (se você quiser salvar materiais no create)
+    materiais,
   } = dados;
 
-  const basePayload = {
+  return {
     titulo,
     data_hora,
     cor,
@@ -37,40 +52,105 @@ export const salvarReuniao = async (dados, regraRecorrencia) => {
     responsavel,
     ata,
     status: status || "Agendada",
-
     tipo_reuniao_id: tipo_reuniao_id || null,
-    tipo_reuniao_legacy: tipo_reuniao_legacy || "Geral", // NOT NULL
-
-    // ✅ só numérico (se existir). Não manda strings tipo "09:00"
+    tipo_reuniao_legacy: tipo_reuniao_legacy || "Geral",
     duracao_segundos: duracao_segundos ?? null,
-
-    // se existir no seu schema
     ...(typeof materiais !== "undefined" ? { materiais } : {}),
   };
+}
 
-  if (!regraRecorrencia || regraRecorrencia === "unica") {
+export const salvarReuniao = async (dados, regraRecorrencia) => {
+  const config = parseRecurrenceConfig(regraRecorrencia);
+  const modo = String(config.mode || "unica").toLowerCase();
+  const basePayload = buildBasePayload(dados);
+  const datasSelecionadas = sortUniqueDates(
+    config.selectedDates || config.datasSelecionadas || []
+  );
+  const horaBase = extractTimeValue(
+    config.timeValue || basePayload.data_hora || "09:00",
+    "09:00"
+  );
+
+  if (modo !== "multipla" && modo !== "multiple" && datasSelecionadas.length <= 1) {
     return await supabase.from("reunioes").insert([basePayload]);
   }
 
-  const datas = gerarDatasRecorrentes(data_hora, regraRecorrencia);
-  const payloadSerie = datas.map((dt) => ({
+  const datas =
+    datasSelecionadas.length > 0
+      ? datasSelecionadas
+      : gerarDatasRecorrentes(
+          basePayload.data_hora,
+          config.rule || config.recurrenceRule || "semanal",
+          config.count || 6
+        ).map((dt) => (dt instanceof Date ? dt.toISOString().slice(0, 10) : String(dt)));
+
+  const payloadSerie = datas.map((dateKey) => ({
     ...basePayload,
-    data_hora: dt.toISOString(),
+    data_hora: buildDateTimeValue(dateKey, horaBase),
   }));
 
   return await supabase.from("reunioes").insert(payloadSerie);
 };
 
 export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) => {
-  // 1) Sempre atualiza a reunião atual (por ID), incluindo data_hora se veio no payload
+  const config =
+    typeof aplicarEmSerie === "object" && aplicarEmSerie !== null
+      ? aplicarEmSerie
+      : {};
+  const modo = String(config.mode || "unica").toLowerCase();
+
+  // 1) Sempre atualiza a reunião atual (por ID)
   const payloadAtual = { ...novosDados };
 
-  // ✅ garantias: não mandar campos que podem dar conflito/timestamptz “extra”
   delete payloadAtual.horario_inicio;
   delete payloadAtual.horario_fim;
-
-  // (opcional) se sua coluna materiais existir e vier undefined, não manda
   if (payloadAtual.materiais === undefined) delete payloadAtual.materiais;
+
+  if (modo === "multipla" || modo === "multiple") {
+    const datasSelecionadas = sortUniqueDates(
+      config.selectedDates || config.datasSelecionadas || []
+    );
+    const horaBase = extractTimeValue(
+      config.timeValue || payloadAtual.data_hora || "09:00",
+      "09:00"
+    );
+    const datas =
+      datasSelecionadas.length > 0
+        ? datasSelecionadas
+        : generateRecurringDates(
+            payloadAtual.data_hora || new Date(),
+            config.rule || config.recurrenceRule || "semanal",
+            config.count || 6
+          );
+
+    const [primeira, ...resto] = datas;
+    const payloadPrimeiro = {
+      ...payloadAtual,
+      data_hora: buildDateTimeValue(primeira || payloadAtual.data_hora, horaBase),
+    };
+
+    const { error: errUpdateAtual } = await supabase
+      .from("reunioes")
+      .update(payloadPrimeiro)
+      .eq("id", id);
+
+    if (errUpdateAtual) return { error: errUpdateAtual };
+
+    if (resto.length > 0) {
+      const payloadSerie = resto.map((dateKey) => ({
+        ...payloadAtual,
+        data_hora: buildDateTimeValue(dateKey, horaBase),
+      }));
+
+      const { error: errInsertSerie } = await supabase
+        .from("reunioes")
+        .insert(payloadSerie);
+
+      if (errInsertSerie) return { error: errInsertSerie };
+    }
+
+    return { error: null };
+  }
 
   const { error: errUpdateAtual } = await supabase
     .from("reunioes")
@@ -79,12 +159,11 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
 
   if (errUpdateAtual) return { error: errUpdateAtual };
 
-  // 2) Se não for pra aplicar na série, acabou aqui
-  if (!aplicarEmSerie) {
+  if (!aplicarEmSerie || typeof aplicarEmSerie === "object") {
     return { error: null };
   }
 
-  // 3) Buscar “chave da série” (você está usando tipo_reuniao_legacy como agrupador)
+  // 3) Buscar "chave da série" (legacy) para propagação antiga
   const { data: original, error: errOrig } = await supabase
     .from("reunioes")
     .select("tipo_reuniao_legacy, data_hora")
@@ -95,7 +174,6 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
     return { error: errOrig || new Error("Original não encontrada") };
   }
 
-  // 4) Propaga apenas campos “template” para as futuras, sem mexer em data_hora
   const payloadSerie = {
     titulo: novosDados.titulo,
     cor: novosDados.cor,
@@ -107,9 +185,6 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
       novosDados.tipo_reuniao_legacy || original.tipo_reuniao_legacy || "Geral",
     duracao_segundos: novosDados.duracao_segundos ?? null,
   };
-
-  // se você quer propagar materiais também, descomente:
-  // if (Array.isArray(novosDados.materiais)) payloadSerie.materiais = novosDados.materiais;
 
   return await supabase
     .from("reunioes")
