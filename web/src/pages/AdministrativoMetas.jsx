@@ -532,7 +532,7 @@ const AdministrativoMetas = () => {
             </select>
           </div>
 
-          <div className="flex space-x-2">
+          <div className="hidden">
             {areas.map((area) => (
               <button
                 key={area.id}

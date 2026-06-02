@@ -1,11 +1,23 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
 import AdministrativoResumo from "./AdministrativoResumo";
 import AdministrativoMetas from "./AdministrativoMetas";
 import AdministrativoRotinas from "./AdministrativoRotinas";
 
+const AREAS_ADMINISTRATIVO = {
+  7: "Financeiro",
+  8: "Pessoas",
+};
+
 export default function Administrativo() {
   const [aba, setAba] = useState("resumo");
+  const [searchParams] = useSearchParams();
+
+  const subsetor = useMemo(() => {
+    const area = searchParams.get("area") || "7";
+    return AREAS_ADMINISTRATIVO[area] || "Financeiro";
+  }, [searchParams]);
 
   const renderContent = () => {
     if (aba === "metas") return <AdministrativoMetas />;
@@ -24,11 +36,14 @@ export default function Administrativo() {
       <div className="h-full p-6 bg-slate-50 overflow-hidden flex flex-col">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-800">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">
               Administrativo
+            </p>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800">
+              {subsetor}
             </h1>
             <p className="text-xs text-slate-400">
-              Financeiro e Pessoas — Resumo, Farol de Metas e Farol de Rotinas.
+              Visão Geral, Farol de Metas e Farol de Rotinas apenas de {subsetor}.
             </p>
           </div>
 
@@ -40,7 +55,7 @@ export default function Administrativo() {
                 aba === "resumo" ? activeBtn : inactiveBtn
               } rounded-none`}
             >
-              Resumo
+              Visão Geral
             </button>
             <button
               type="button"

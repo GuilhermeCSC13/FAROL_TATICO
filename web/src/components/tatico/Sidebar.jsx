@@ -20,7 +20,6 @@ const setores = [
     label: "Operação",
     path: "/planejamento/operacao",
     children: [
-      { label: "Visão Geral", to: "/planejamento/operacao?area=4" },
       { label: "PCO", to: "/planejamento/operacao?area=4" },
       { label: "Gestão de Motoristas", to: "/planejamento/operacao?area=5" },
     ],
@@ -30,7 +29,6 @@ const setores = [
     label: "Manutenção",
     path: "/manutencao",
     children: [
-      { label: "Visão Geral", to: "/manutencao?area=2" },
       { label: "Gestão de Frota", to: "/manutencao?area=2" },
       { label: "PCM", to: "/manutencao?area=9" },
     ],
@@ -39,20 +37,21 @@ const setores = [
     key: "moov",
     label: "Moov",
     path: "/moov",
-    children: [{ label: "Visão Geral", to: "/moov?area=3" }],
+    children: [{ label: "Moov", to: "/moov?area=3" }],
   },
   {
     key: "administrativo",
     label: "Administrativo",
     path: "/planejamento/administrativo",
     children: [
-      { label: "Visão Geral", to: "/planejamento/administrativo?area=7" },
       { label: "Financeiro", to: "/planejamento/administrativo?area=7" },
       { label: "Pessoas", to: "/planejamento/administrativo?area=8" },
     ],
   },
 ];
 
+const getActiveSetorKey = (pathname) =>
+  setores.find((setor) => pathname.startsWith(setor.path))?.key || null;
 export default function Sidebar() {
   const location = useLocation();
   const [user, setUser] = useState({ nome: "Gestor", nivel: "" });
@@ -62,6 +61,9 @@ export default function Sidebar() {
   );
 
   const [openPlanejamento, setOpenPlanejamento] = useState(isPlanejamentoActive);
+  const [openSetorKey, setOpenSetorKey] = useState(
+    getActiveSetorKey(location.pathname)
+  );
 
   useEffect(() => {
     const loadUser = async () => {
@@ -116,7 +118,10 @@ export default function Sidebar() {
   const isAdm = String(user.nivel || "").trim().toLowerCase() === "administrador";
 
   useEffect(() => {
-    if (isPlanejamentoActive) setOpenPlanejamento(true);
+    if (isPlanejamentoActive) {
+      setOpenPlanejamento(true);
+      setOpenSetorKey(getActiveSetorKey(location.pathname));
+    }
   }, [location.pathname, isPlanejamentoActive]);
 
   const linkBaseClasses =
@@ -186,41 +191,59 @@ export default function Sidebar() {
                 : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-2 pl-2 border-l border-blue-500/30 space-y-3">
-              {setores.map((setor) => (
-                <div key={setor.key} className="space-y-1">
-                  <NavLink
-                    to={setor.path}
-                    className={({ isActive }) =>
-                      `w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors ${
-                        isActive
+            <div className="ml-2 pl-2 border-l border-blue-500/30 space-y-2">
+              {setores.map((setor) => {
+                const isSetorActive = location.pathname.startsWith(setor.path);
+                const isSetorOpen = openSetorKey === setor.key;
+
+                return (
+                  <div key={setor.key} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSetorKey((prev) =>
+                          prev === setor.key ? null : setor.key
+                        )
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors ${
+                        isSetorActive
                           ? "bg-blue-500 text-white font-semibold"
                           : "text-blue-50 hover:bg-blue-600/50"
-                      }`
-                    }
-                  >
-                    <span>{setor.label}</span>
-                  </NavLink>
+                      }`}
+                    >
+                      <span>{setor.label}</span>
+                      {isSetorOpen ? (
+                        <FaChevronDown className="text-[9px] opacity-70" />
+                      ) : (
+                        <FaChevronRight className="text-[9px] opacity-70" />
+                      )}
+                    </button>
 
-                  <div className="ml-3 pl-3 border-l border-blue-400/30 space-y-1">
-                    {setor.children.map((item) => (
-                      <NavLink
-                        key={`${setor.key}-${item.label}`}
-                        to={item.to}
-                        className={({ isActive }) =>
-                          `block px-3 py-1.5 text-[11px] rounded-md transition-colors ${
-                            isActive
-                              ? "bg-blue-200 text-blue-900 font-semibold"
-                              : "text-blue-100 hover:bg-blue-600/40"
-                          }`
-                        }
-                      >
-                        {item.label}
-                      </NavLink>
-                    ))}
+                    {isSetorOpen && (
+                      <div className="ml-3 pl-3 border-l border-blue-400/30 space-y-1">
+                        {setor.children.map((item) => {
+                          const isChildActive =
+                            `${location.pathname}${location.search}` === item.to;
+
+                          return (
+                            <NavLink
+                              key={`${setor.key}-${item.label}`}
+                              to={item.to}
+                              className={`block px-3 py-1.5 text-[11px] rounded-md transition-colors ${
+                                isChildActive
+                                  ? "bg-blue-200 text-blue-900 font-semibold"
+                                  : "text-blue-100 hover:bg-blue-600/40"
+                              }`}
+                            >
+                              {item.label}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

@@ -292,7 +292,7 @@ const ManutencaoResumo = () => {
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">
-            Visão Geral — Gestão de Frota
+            Visão Geral — {areaLabel}
           </h2>
           <p className="text-sm text-gray-500">
             Acompanhamento consolidado de performance —{" "}
@@ -305,7 +305,7 @@ const ManutencaoResumo = () => {
           <select
             value={areaFiltro}
             onChange={(e) => setAreaFiltro(e.target.value)}
-            className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-3 py-2 font-semibold shadow-sm"
+            className="hidden"
           >
             <option value={String(ID_PCM)}>PCM</option>
             <option value={String(ID_GESTAO_FROTA)}>Gestão de Frota</option>

@@ -426,7 +426,7 @@ export default function DetalhesReuniao({
     : [];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 relative">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
       {/* Modal Auth Material */}
       {showAuthMaterial && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-in fade-in duration-200">
@@ -489,8 +489,8 @@ export default function DetalhesReuniao({
         </div>
       )}
 
-      {/* ESQUERDA */}
-      <div className="lg:col-span-5 space-y-8 flex flex-col">
+      {/* ESQUERDA - CONFIGURAÇÕES */}
+      <div className="lg:col-span-4 space-y-8 flex flex-col">
         <section className="space-y-4 flex-1">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest">
@@ -522,20 +522,6 @@ export default function DetalhesReuniao({
               onChange={(e) => handleChange("titulo", e.target.value)}
             />
           </div>
-
-          <AgendaDatePlanner
-            label="Data e recorrência"
-            helperText="Escolha uma data mais elegante, ou transforme a reunião em uma agenda múltipla."
-            mode={agendaMode}
-            onModeChange={(value) => handleChange("agenda_mode", value)}
-            singleDate={formData.data || ""}
-            onSingleDateChange={(value) => handleChange("data", value)}
-            selectedDates={agendaDates}
-            onSelectedDatesChange={(values) => handleChange("datas_selecionadas", values)}
-            recurrenceRule={formData.recurrence_rule || "semanal"}
-            onRecurrenceRuleChange={(value) => handleChange("recurrence_rule", value)}
-            disabled={isRealizada || isCancelada}
-          />
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -860,8 +846,8 @@ export default function DetalhesReuniao({
         )}
       </div>
 
-      {/* DIREITA */}
-      <div className="lg:col-span-7 flex flex-col space-y-4">
+      {/* MEIO - ATA */}
+      <div className="lg:col-span-4 flex flex-col space-y-4">
         <h3 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2">
           <AlignLeft size={16} /> ATA da Reunião
         </h3>
@@ -978,6 +964,26 @@ export default function DetalhesReuniao({
             )}
           </div>
         </div>
+      </div>
+
+      {/* DIREITA - AGENDA */}
+      <div className="lg:col-span-4 flex flex-col space-y-4">
+        <h3 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2">
+          <Users size={16} /> Agenda
+        </h3>
+        <AgendaDatePlanner
+          label="Data e recorrência"
+          helperText="Escolha uma data mais elegante, ou transforme a reunião em uma agenda múltipla."
+          mode={agendaMode}
+          onModeChange={(value) => handleChange("agenda_mode", value)}
+          singleDate={formData.data || ""}
+          onSingleDateChange={(value) => handleChange("data", value)}
+          selectedDates={agendaDates}
+          onSelectedDatesChange={(values) => handleChange("datas_selecionadas", values)}
+          recurrenceRule={formData.recurrence_rule || "semanal"}
+          onRecurrenceRuleChange={(value) => handleChange("recurrence_rule", value)}
+          disabled={isRealizada || isCancelada}
+        />
       </div>
     </div>
   );

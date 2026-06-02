@@ -1,11 +1,23 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
 import ManutencaoMetas from "./ManutencaoMetas";
 import ManutencaoRotinas from "./ManutencaoRotinas";
 import ManutencaoResumo from "./ManutencaoResumo";
 
+const AREAS_MANUTENCAO = {
+  2: "Gestão de Frota",
+  9: "PCM",
+};
+
 const Manutencao = () => {
   const [aba, setAba] = useState("resumo");
+  const [searchParams] = useSearchParams();
+
+  const subsetor = useMemo(() => {
+    const area = searchParams.get("area") || "2";
+    return AREAS_MANUTENCAO[area] || "Gestão de Frota";
+  }, [searchParams]);
 
   const renderContent = () => {
     if (aba === "metas") return <ManutencaoMetas />;
@@ -24,11 +36,14 @@ const Manutencao = () => {
       <div className="h-full p-6 bg-slate-50 overflow-hidden flex flex-col font-sans">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 uppercase tracking-tight">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">
               Manutenção
+            </p>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 uppercase tracking-tight">
+              {subsetor}
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
-              Gestão de frota, intervenções e rotinas técnicas.
+              Visão Geral, Farol de Metas e Farol de Rotinas apenas de {subsetor}.
             </p>
           </div>
 
@@ -40,7 +55,7 @@ const Manutencao = () => {
                 aba === "resumo" ? activeBtn : inactiveBtn
               } rounded-none`}
             >
-              Resumo
+              Visão Geral
             </button>
             <button
               type="button"

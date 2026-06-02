@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
@@ -88,6 +89,7 @@ function parseNumberPtBr(raw) {
 }
 
 const ManutencaoRotinas = () => {
+  const [searchParams] = useSearchParams();
   const [areas, setAreas] = useState(AREAS_MANUTENCAO);
   const [areaSelecionada, setAreaSelecionada] = useState(ID_GESTAO_FROTA);
   const [rotinas, setRotinas] = useState([]);
@@ -105,6 +107,16 @@ const ManutencaoRotinas = () => {
     if (areaSelecionada) fetchRotinasData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaSelecionada]);
+
+  useEffect(() => {
+    const areaParam = Number(searchParams.get("area"));
+    if (
+      [ID_GESTAO_FROTA, ID_PCM].includes(areaParam) &&
+      areaParam !== areaSelecionada
+    ) {
+      setAreaSelecionada(areaParam);
+    }
+  }, [searchParams, areaSelecionada]);
 
   const fetchAreas = async () => {
     try {
@@ -446,7 +458,7 @@ const ManutencaoRotinas = () => {
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-800">
-            Farol de Rotinas — Gestão de Frota
+            Farol de Rotinas — {areas.find((area) => area.id === areaSelecionada)?.nome || "Gestão de Frota"}
           </h2>
 
           <div className="relative">
@@ -508,7 +520,7 @@ const ManutencaoRotinas = () => {
             </button>
           </div>
 
-          <div className="flex space-x-2">
+          <div className="hidden">
             {areas.map((area) => (
               <button
                 key={area.id}
