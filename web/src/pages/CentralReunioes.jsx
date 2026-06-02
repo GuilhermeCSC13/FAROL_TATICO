@@ -593,11 +593,11 @@ export default function CentralReunioes() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Calendário Tático</h1>
-            <p className="mt-1 text-sm font-bold text-red-600">
+          </div>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-bold text-red-600">
               Escolha a melhor visualização para voce
             </p>
-          </div>
-          <div className="flex gap-2">
             <div className="bg-white border p-1 rounded-lg flex shadow-sm">
               <button
                 onClick={() => setView("week")}
