@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/tatico/Layout';
 import { supabase } from '../supabaseClient';
+import { format } from "date-fns";
 import AgendaDatePlanner from "../components/tatico/AgendaDatePlanner";
 import { atualizarReuniao } from "../services/agendaService";
-import { sortUniqueDates } from "../services/agendaDates";
+import { extractTimeValue, parseSafeDate, sortUniqueDates } from "../services/agendaDates";
 import { 
   ChevronLeft, ChevronRight, Calendar as CalIcon, 
   List, Grid, X, Clock, Edit2, ArrowRight 
@@ -35,6 +36,27 @@ const ReunioesCalendario = () => {
 
   // Drag & Drop
   const [draggingEvent, setDraggingEvent] = useState(null);
+
+  const getEventBaseDate = (value) => parseSafeDate(value);
+
+  const getEventDisplayTime = (evento) => {
+    const status = String(evento?.status || "").toLowerCase();
+    const source =
+      status.includes("realiz")
+        ? evento?.gravacao_inicio || evento?.horario_inicio || evento?.data_hora
+        : evento?.horario_inicio || evento?.data_hora || evento?.gravacao_inicio;
+    const direct = extractTimeValue(source, "");
+    if (direct) return direct;
+    return getEventBaseDate(source).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getEventEditDate = (value) => {
+    const d = getEventBaseDate(value);
+    return format(d, "yyyy-MM-dd");
+  };
 
   useEffect(() => {
     fetchReunioesPeriodo();
@@ -76,12 +98,16 @@ const ReunioesCalendario = () => {
   // ---------------------------------
   const handleEventClick = (e, evento) => {
     e.stopPropagation();
-    const dt = new Date(evento.data_hora);
-    const dateKey = dt.toISOString().split('T')[0];
+    const dt = getEventBaseDate(evento.data_hora);
+    const dateKey = getEventEditDate(evento.data_hora);
+    const status = String(evento?.status || "").toLowerCase();
+    const timeSource = status.includes("realiz")
+      ? evento.gravacao_inicio || evento.horario_inicio || evento.data_hora
+      : evento.horario_inicio || evento.data_hora || evento.gravacao_inicio;
     setSelectedEvent(evento);
     setEditForm({
       date: dateKey,
-      time: dt.toTimeString().substring(0, 5),
+      time: extractTimeValue(timeSource || dt, dt.toTimeString().substring(0, 5)),
       mode: 'unica',
       dates: [dateKey],
       rule: 'semanal',
@@ -160,8 +186,8 @@ const ReunioesCalendario = () => {
 
   const eventosDoDia = (diaDate) => {
     if (!diaDate) return [];
-    const diaStr = diaDate.toISOString().split('T')[0];
-    return reunioes.filter((r) => r.data_hora.startsWith(diaStr));
+    const diaStr = getEventEditDate(diaDate);
+    return reunioes.filter((r) => getEventEditDate(r.data_hora) === diaStr);
   };
 
   const resumoPauta = (pauta) => {
@@ -187,7 +213,7 @@ const ReunioesCalendario = () => {
     if (!draggingEvent) return;
 
     try {
-      const origem = new Date(draggingEvent.data_hora);
+      const origem = getEventBaseDate(draggingEvent.data_hora);
       const novaDataHora = new Date(
         diaDestino.getFullYear(),
         diaDestino.getMonth(),
@@ -196,7 +222,7 @@ const ReunioesCalendario = () => {
         origem.getMinutes(),
         origem.getSeconds()
       );
-      const novaIso = novaDataHora.toISOString();
+      const novaIso = `${getEventEditDate(diaDestino)}T${String(novaDataHora.getHours()).padStart(2, '0')}:${String(novaDataHora.getMinutes()).padStart(2, '0')}:${String(novaDataHora.getSeconds()).padStart(2, '0')}`;
 
       const { error } = await supabase
         .from('reunioes')
@@ -353,12 +379,7 @@ const ReunioesCalendario = () => {
                       </span>
                       <div className="mt-1 flex flex-col gap-1 overflow-y-auto max-h-[100px] custom-scrollbar">
                         {eventosDia.map((ev) => {
-                          const dt = new Date(ev.data_hora);
-                          const horaStr = `${String(
-                            dt.getHours()
-                          ).padStart(2, '0')}:${String(
-                            dt.getMinutes()
-                          ).padStart(2, '0')}`;
+          const horaStr = getEventDisplayTime(ev);
 
                           return (
                             <div
@@ -424,11 +445,7 @@ const ReunioesCalendario = () => {
                       </div>
                       <div className="flex flex-col gap-1 max-h-[100px] overflow-y-auto custom-scrollbar">
                         {eventosDia.map((ev) => {
-                          const dt = new Date(ev.data_hora);
-                          const horaStr = dt.toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          });
+                          const horaStr = getEventDisplayTime(ev);
 
                           return (
                             <div
@@ -460,7 +477,7 @@ const ReunioesCalendario = () => {
                 {diasSemana.map((dia) => {
                   const eventosDia = eventosDoDia(dia);
                   if (eventosDia.length === 0) return null;
-                  const diaStr = dia.toISOString().split('T')[0];
+                  const diaStr = getEventEditDate(dia);
 
                   return (
                     <div key={diaStr} className="flex gap-4">
@@ -491,10 +508,7 @@ const ReunioesCalendario = () => {
                                   </h3>
                                   <p className="text-xs text-gray-500 flex items-center gap-1">
                                     <Clock size={12} />{' '}
-                                    {new Date(ev.data_hora).toLocaleTimeString(
-                                      [],
-                                      { hour: '2-digit', minute: '2-digit' }
-                                    )}{' '}
+                                    {getEventDisplayTime(ev)}{' '}
                                     • {ev.tipo_reuniao}
                                   </p>
                                 </div>
@@ -528,7 +542,7 @@ const ReunioesCalendario = () => {
                   const eventosDia = eventosDoDia(dia);
                   if (eventosDia.length === 0) return null;
 
-                  const diaStr = dia.toISOString().split('T')[0];
+                  const diaStr = getEventEditDate(dia);
 
                   return (
                     <div key={diaStr} className="flex gap-4">
@@ -559,10 +573,7 @@ const ReunioesCalendario = () => {
                                   </h3>
                                   <p className="text-xs text-gray-500 flex items-center gap-1">
                                     <Clock size={12} />{' '}
-                                    {new Date(ev.data_hora).toLocaleTimeString(
-                                      [],
-                                      { hour: '2-digit', minute: '2-digit' }
-                                    )}{' '}
+                                    {getEventDisplayTime(ev)}{' '}
                                     • {ev.tipo_reuniao}
                                   </p>
                                 </div>

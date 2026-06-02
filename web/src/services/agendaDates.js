@@ -1,11 +1,33 @@
 import { addDays, addMonths, format, isValid, parseISO } from "date-fns";
 
+function parseLocalDateParts(raw) {
+  const match = String(raw || "").match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+
+  if (!match) return null;
+
+  const [, y, m, d, hh = "00", mm = "00", ss = "00"] = match;
+  return new Date(
+    Number(y),
+    Number(m) - 1,
+    Number(d),
+    Number(hh),
+    Number(mm),
+    Number(ss)
+  );
+}
+
 export function parseSafeDate(value) {
   if (!value) return new Date();
+  if (value instanceof Date) return value;
 
   const raw = String(value);
+  const local = parseLocalDateParts(raw);
+  if (local && isValid(local)) return local;
+
   const normalized = raw.length >= 19 ? raw.substring(0, 19) : raw;
-  const date = normalized.includes("T") ? new Date(normalized) : new Date(`${normalized}T00:00:00`);
+  const date = normalized.includes("T") ? new Date(normalized) : new Date(raw);
 
   if (isValid(date)) return date;
 
