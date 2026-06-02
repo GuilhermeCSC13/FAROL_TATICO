@@ -897,10 +897,22 @@ export default function SalasReuniao() {
 
             <button
               onClick={() => setShowGerenciar(true)}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 px-3 py-2 rounded-lg flex items-center gap-2 text-sm text-slate-700 shadow-sm"
-              title="Gerenciar salas"
+              className={
+                salas.length === 0
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold shadow-md animate-pulse"
+                  : "bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 px-3 py-2 rounded-lg flex items-center gap-2 text-sm text-slate-700 shadow-sm"
+              }
+              title={salas.length === 0 ? "Cadastre a primeira sala" : "Gerenciar salas"}
             >
-              <Settings size={16} /> <span className="hidden md:inline">Gerenciar</span>
+              {salas.length === 0 ? (
+                <>
+                  <Plus size={16} /> <span>Cadastrar Sala</span>
+                </>
+              ) : (
+                <>
+                  <Settings size={16} /> <span className="hidden md:inline">Gerenciar</span>
+                </>
+              )}
             </button>
 
             <button
@@ -912,6 +924,27 @@ export default function SalasReuniao() {
             </button>
           </div>
         </div>
+
+        {/* Sem salas cadastradas */}
+        {!loading && salas.length === 0 && (
+          <div className="mb-3 px-4 py-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 flex items-center gap-3 text-sm">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-none">
+              <DoorOpen size={18} />
+            </div>
+            <div className="flex-1">
+              <div className="font-black text-emerald-900">Nenhuma sala cadastrada ainda</div>
+              <div className="text-xs text-emerald-700 mt-0.5">
+                Clique em <b>Cadastrar Sala</b> no canto superior direito para começar.
+              </div>
+            </div>
+            <button
+              onClick={() => setShowGerenciar(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-black shadow-sm flex items-center gap-2"
+            >
+              <Plus size={14} /> Cadastrar Sala
+            </button>
+          </div>
+        )}
 
         {/* Sala info */}
         {salaAtual && (
