@@ -199,6 +199,7 @@ export default function Copiloto() {
   const [acaoSelecionada, setAcaoSelecionada] = useState(null);
 
   const [showUnlock, setShowUnlock] = useState(false);
+  const [showPreStartModal, setShowPreStartModal] = useState(false);
   const [senhaAdm, setSenhaAdm] = useState("");
 
   const isMountedRef = useRef(false);
@@ -517,7 +518,7 @@ export default function Copiloto() {
   /* =========================
      Gravação
   ========================= */
-  const onStart = async () => {
+  const onStart = () => {
     if (!selecionada?.id) return alert("Selecione uma reunião.");
     if (isRecording) return;
 
@@ -527,6 +528,11 @@ export default function Copiloto() {
       );
     }
 
+    setShowPreStartModal(true);
+  };
+
+  const doStart = async () => {
+    setShowPreStartModal(false);
     try {
       await startRecording({
         reuniaoId: selecionada.id,
@@ -1708,6 +1714,72 @@ export default function Copiloto() {
             </div>
             <div className="mt-2 text-[11px] text-slate-500">
               Validação feita no <b>SUPABASE INOVE</b> (usuarios_aprovadores).
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPreStartModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white px-6 py-4">
+              <div className="text-xs font-bold opacity-80 tracking-wider">ANTES DE COMEÇAR</div>
+              <div className="text-lg font-black">Como gravar sem perder a reunião</div>
+            </div>
+
+            <div className="p-6 text-sm text-slate-700 space-y-4">
+              <p className="text-slate-600">
+                Para que a gravação <b>não seja encerrada</b> ao abrir slides ou outras janelas, siga este passo a passo:
+              </p>
+
+              <ol className="space-y-3">
+                <li className="flex gap-3">
+                  <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">1</span>
+                  <span>
+                    Na janela de compartilhamento do Chrome, escolha a aba <b>“Janela”</b> (e não <b>“Tela inteira”</b>).
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">2</span>
+                  <span>
+                    Selecione a janela que será apresentada (ex.: PowerPoint, navegador, Teams).
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">3</span>
+                  <span>
+                    Se for apresentar slides, use o <b>Modo Leitura</b> no PowerPoint
+                    <span className="text-slate-500"> (Apresentação → Configurar Apresentação → “Apresentada por uma pessoa (janela)”)</span>. Evite F5/Apresentação em tela cheia.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">4</span>
+                  <span>
+                    Ative <b>“Compartilhar também o áudio do sistema”</b> antes de clicar em Compartilhar.
+                  </span>
+                </li>
+              </ol>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                ⚠️ Se alguém colocar o PowerPoint em tela cheia durante a reunião, o Chrome pode encerrar a captura automaticamente.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPreStartModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={doStart}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-sm"
+              >
+                Continuar
+              </button>
             </div>
           </div>
         </div>
