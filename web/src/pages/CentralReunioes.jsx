@@ -867,9 +867,9 @@ export default function CentralReunioes() {
 
       {/* MODAL DETALHES */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
-            <div className="bg-white px-8 py-5 border-b flex justify-between items-center shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-[min(96vw,1600px)] h-[94vh] flex flex-col overflow-hidden">
+            <div className="bg-white px-6 sm:px-8 py-4 sm:py-5 border-b flex justify-between items-center shrink-0">
               <h2 className="text-xl font-bold text-slate-800">
                 {editingReuniao ? "Editar Reunião" : "Nova Reunião"}
               </h2>
@@ -884,7 +884,7 @@ export default function CentralReunioes() {
             <form
               id="form-reuniao"
               onSubmit={handleSubmit}
-              className="flex-1 overflow-y-auto p-8 bg-white"
+              className="flex-1 overflow-y-auto p-6 sm:p-8 bg-white"
             >
               <DetalhesReuniao
                 formData={formData}
@@ -897,7 +897,7 @@ export default function CentralReunioes() {
               />
             </form>
 
-            <div className="bg-slate-50 p-5 border-t flex justify-end gap-3 shrink-0">
+            <div className="bg-slate-50 p-4 sm:p-5 border-t flex justify-end gap-3 shrink-0">
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="px-6 py-2 text-slate-500 font-bold"
