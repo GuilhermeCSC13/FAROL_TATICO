@@ -1,5 +1,6 @@
 // src/pages/SalasReuniao.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
 import { supabase } from "../supabaseClient";
 import {
@@ -442,8 +443,10 @@ function ModalGerenciarSalas({ aberto, salas, onClose, onChanged }) {
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────
 export default function SalasReuniao() {
+  const navigate = useNavigate();
   const [salas, setSalas] = useState([]);
   const [reservas, setReservas] = useState([]);
+  const [reunioes, setReunioes] = useState([]);
   const [salaSelecionada, setSalaSelecionada] = useState("");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -459,12 +462,18 @@ export default function SalasReuniao() {
 
   const carregar = async () => {
     setLoading(true);
-    const [{ data: ds }, { data: dr }] = await Promise.all([
+    const [{ data: ds }, { data: dr }, { data: dre }] = await Promise.all([
       supabase.from("salas").select("*").order("nome"),
       supabase.from("reservas_salas").select("*").order("data_hora_inicio"),
+      supabase
+        .from("reunioes")
+        .select("id, titulo, data_hora, horario_inicio, horario_fim, responsavel, sala_id, tipo_reuniao_id, tipos_reuniao:tipo_reuniao_id(nome, cor)")
+        .not("sala_id", "is", null)
+        .order("data_hora"),
     ]);
     setSalas(ds || []);
     setReservas(dr || []);
+    setReunioes(dre || []);
     if (!salaSelecionada && ds?.length) setSalaSelecionada(String(ds[0].id));
     setLoading(false);
   };
@@ -478,28 +487,61 @@ export default function SalasReuniao() {
 
   const salaAtual = salas.find((s) => String(s.id) === String(salaSelecionada));
 
-  const reservasFiltradas = useMemo(() => {
+  // Combina reservas manuais e reuniões da Agenda Tática (com sala_id setada).
+  const itensFiltrados = useMemo(() => {
     if (!salaSelecionada) return [];
-    return reservas.filter((r) => String(r.sala_id) === String(salaSelecionada));
-  }, [reservas, salaSelecionada]);
+    const salaIdStr = String(salaSelecionada);
+
+    const r1 = reservas
+      .filter((r) => String(r.sala_id) === salaIdStr)
+      .map((r) => ({
+        kind: "reserva",
+        id: `reserva-${r.id}`,
+        raw: r,
+        inicio: r.data_hora_inicio,
+        fim: r.data_hora_fim,
+        titulo: r.titulo,
+        responsavel: r.responsavel,
+        cor: salaAtual?.cor || "#3B82F6",
+      }));
+
+    const r2 = reunioes
+      .filter((r) => String(r.sala_id) === salaIdStr)
+      .map((r) => {
+        const dia = String(r.data_hora || "").split("T")[0];
+        const hi = (r.horario_inicio || extractTime(r.data_hora) || "09:00").substring(0, 5);
+        const hf = (r.horario_fim || "10:00").substring(0, 5);
+        return {
+          kind: "reuniao",
+          id: `reuniao-${r.id}`,
+          raw: r,
+          inicio: `${dia}T${hi}:00`,
+          fim: `${dia}T${hf}:00`,
+          titulo: r.titulo || r.tipos_reuniao?.nome || "Reunião",
+          responsavel: r.responsavel || "",
+          cor: r.tipos_reuniao?.cor || "#8B5CF6",
+        };
+      });
+
+    return [...r1, ...r2];
+  }, [reservas, reunioes, salaSelecionada]);
 
   const reservasPorDia = useMemo(() => {
     const m = new Map();
-    reservasFiltradas.forEach((r) => {
-      const d = parseDataLocal(r.data_hora_inicio);
+    itensFiltrados.forEach((it) => {
+      const d = parseDataLocal(it.inicio);
       if (!d) return;
       const key = format(d, "yyyy-MM-dd");
       if (!m.has(key)) m.set(key, []);
-      m.get(key).push(r);
+      m.get(key).push(it);
     });
-    // ordena por hora
     for (const arr of m.values()) {
       arr.sort((a, b) =>
-        (extractTime(a.data_hora_inicio) || "").localeCompare(extractTime(b.data_hora_inicio) || "")
+        (extractTime(a.inicio) || "").localeCompare(extractTime(b.inicio) || "")
       );
     }
     return m;
-  }, [reservasFiltradas]);
+  }, [itensFiltrados]);
 
   const abrirNova = (dia = new Date()) => {
     setReservaEdit(null);
@@ -572,8 +614,16 @@ export default function SalasReuniao() {
                 <Users size={12} /> {salaAtual.capacidade} pessoas
               </span>
             ) : null}
-            <span className="ml-auto text-xs text-slate-500">
-              {reservasFiltradas.length} reserva{reservasFiltradas.length === 1 ? "" : "s"} no total
+            <span className="ml-auto text-xs text-slate-500 flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: salaAtual.cor || "#3B82F6" }} />
+                Reservas manuais
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full border-2 border-violet-500 bg-violet-100" />
+                Da Agenda Tática
+              </span>
+              <span className="ml-2 font-bold text-slate-700">{itensFiltrados.length} total</span>
             </span>
           </div>
         )}
@@ -634,23 +684,40 @@ export default function SalasReuniao() {
                         Livre
                       </div>
                     )}
-                    {lista.map((r) => (
-                      <div
-                        key={r.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          abrirEdit(r);
-                        }}
-                        className="rounded-lg border border-l-4 bg-white shadow-sm p-2 hover:shadow-md transition cursor-pointer"
-                        style={{ borderLeftColor: salaAtual?.cor || "#3B82F6" }}
-                      >
-                        <div className="text-[10px] text-slate-500 font-bold">
-                          {extractTime(r.data_hora_inicio)} - {extractTime(r.data_hora_fim)}
+                    {lista.map((it) => {
+                      const isReuniao = it.kind === "reuniao";
+                      return (
+                        <div
+                          key={it.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isReuniao) {
+                              navigate(`/central-reunioes?editId=${it.raw.id}`);
+                            } else {
+                              abrirEdit(it.raw);
+                            }
+                          }}
+                          className={`rounded-lg border border-l-4 shadow-sm p-2 hover:shadow-md transition cursor-pointer ${
+                            isReuniao
+                              ? "bg-violet-50/60 border border-dashed border-violet-300"
+                              : "bg-white"
+                          }`}
+                          style={{ borderLeftColor: it.cor }}
+                          title={isReuniao ? "Reunião da Agenda Tática (clique pra editar)" : "Reserva manual (clique pra editar)"}
+                        >
+                          <div className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
+                            {extractTime(it.inicio)} - {extractTime(it.fim)}
+                            {isReuniao && (
+                              <span className="ml-auto text-[9px] uppercase font-black tracking-wide text-violet-700 bg-violet-100 px-1 rounded">
+                                Agenda
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 truncate">{it.titulo}</div>
+                          <div className="text-[10px] text-slate-500 truncate">{it.responsavel}</div>
                         </div>
-                        <div className="text-xs font-bold text-slate-800 truncate">{r.titulo}</div>
-                        <div className="text-[10px] text-slate-500 truncate">{r.responsavel}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

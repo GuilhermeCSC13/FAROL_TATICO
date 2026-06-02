@@ -54,6 +54,7 @@ export default function DetalhesReuniao({
   setFormData,
   editingReuniao,
   tipos = [],
+  salas = [],
   isRealizada = false,
   onDeleteRequest,
   onCancelRequest, // ✅ NOVO
@@ -789,6 +790,25 @@ export default function DetalhesReuniao({
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Sala (opcional)
+            </label>
+            <select
+              disabled={isRealizada || isCancelada}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none font-semibold disabled:opacity-60"
+              value={formData.sala_id || ""}
+              onChange={(e) => handleChange("sala_id", e.target.value)}
+            >
+              <option value="">Sem sala</option>
+              {(salas || []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nome}{s.capacidade ? ` (${s.capacidade}p)` : ""}
                 </option>
               ))}
             </select>
