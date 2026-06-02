@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, RefreshCw, LogOut, Check, AlertCircle } from "lucide-react";
+import { X, RefreshCw, LogOut, Check, AlertCircle, HelpCircle, ChevronLeft, Shield } from "lucide-react";
 import {
   ensureGoogleToken,
   clearGoogleToken,
@@ -36,6 +36,7 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
   const [sincronizando, setSincronizando] = useState(false);
   const [progresso, setProgresso] = useState({ done: 0, total: 0 });
   const [resultado, setResultado] = useState(null);
+  const [showAjuda, setShowAjuda] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
@@ -153,9 +154,22 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
               <div className="text-base font-black text-slate-800">Sincronizar com Google Agenda</div>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowAjuda((s) => !s)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
+                showAjuda
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-blue-600 hover:bg-blue-50"
+              }`}
+              title="Como conectar"
+            >
+              <HelpCircle size={14} /> Passo a passo
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Conta conectada / desconectada */}
@@ -176,7 +190,15 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
             </>
           ) : (
             <>
-              <div className="text-slate-600">Conecte sua conta Google para sincronizar.</div>
+              <div className="text-slate-600">
+                Conecte sua conta Google para sincronizar.{" "}
+                <button
+                  onClick={() => setShowAjuda(true)}
+                  className="text-blue-600 font-bold underline-offset-2 hover:underline"
+                >
+                  Como conectar?
+                </button>
+              </div>
               <button
                 onClick={handleConectar}
                 disabled={conectando}
@@ -189,8 +211,94 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
           )}
         </div>
 
+        {/* Passo a passo */}
+        {showAjuda && (
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 bg-blue-50/30">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAjuda(false)}
+                className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+              >
+                <ChevronLeft size={14} /> Voltar
+              </button>
+            </div>
+
+            <h3 className="text-base font-black text-slate-800">
+              Como conectar sua conta Google
+            </h3>
+
+            <ol className="space-y-3">
+              <li className="flex gap-3">
+                <span className="flex-none w-7 h-7 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">1</span>
+                <div className="text-sm text-slate-700">
+                  Clique em <b>Conectar Google</b> (ou na barra azul logo abaixo do título).
+                </div>
+              </li>
+
+              <li className="flex gap-3">
+                <span className="flex-none w-7 h-7 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">2</span>
+                <div className="text-sm text-slate-700">
+                  Vai abrir uma <b>janela do Google</b>. Escolha a conta que você usa no celular/Google Agenda.
+                </div>
+              </li>
+
+              <li className="flex gap-3">
+                <span className="flex-none w-7 h-7 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center">3</span>
+                <div className="text-sm text-slate-700">
+                  <b className="text-amber-700">Vai aparecer uma tela amarela: "O Google ainda não verificou este app".</b>{" "}
+                  Isso é normal — não foi pirateado, não tem vírus. É só porque o app ainda está em revisão oficial.
+                  <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs">
+                    <div className="font-bold text-amber-800 mb-1 flex items-center gap-1">
+                      <Shield size={12} /> Como passar dessa tela:
+                    </div>
+                    <ol className="list-decimal pl-4 space-y-1 text-amber-900">
+                      <li>Clique no link <b>"Avançado"</b> (ou <b>"Show advanced"</b>) no canto inferior esquerdo.</li>
+                      <li>Embaixo do texto que aparecer, clique em <b>"Acessar Farol Tático (não seguro)"</b>.</li>
+                    </ol>
+                    <div className="mt-2 text-amber-800">
+                      ✅ Esse "não seguro" é só rótulo padrão do Google. Seus dados continuam protegidos.
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <li className="flex gap-3">
+                <span className="flex-none w-7 h-7 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">4</span>
+                <div className="text-sm text-slate-700">
+                  Na próxima tela, o Google vai pedir permissão pra <b>"Ver, editar e excluir eventos da sua agenda"</b>.{" "}
+                  Clique em <b>"Continuar"</b>.
+                </div>
+              </li>
+
+              <li className="flex gap-3">
+                <span className="flex-none w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center">5</span>
+                <div className="text-sm text-slate-700">
+                  Pronto! Você volta automaticamente pro Farol com a conta conectada. Escolha o <b>período</b> e os <b>tipos de reunião</b> e clica em <b>Sincronizar agora</b>.
+                </div>
+              </li>
+            </ol>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-2">
+              <div className="font-bold text-slate-700 flex items-center gap-1">
+                <HelpCircle size={12} /> Perguntas frequentes
+              </div>
+              <div>
+                <b>Posso desconectar depois?</b> Sim — botão "Trocar conta" no topo do modal,
+                ou em myaccount.google.com → Segurança → Aplicativos com acesso à conta.
+              </div>
+              <div>
+                <b>O que sincroniza?</b> Apenas reuniões futuras dos tipos que você marcar. Cada evento
+                vai com título, data/hora, ATA e cor do tipo. Participantes não são convidados ainda.
+              </div>
+              <div>
+                <b>Se eu sincronizar de novo?</b> O Farol atualiza os eventos existentes em vez de criar duplicados.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Corpo */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className={`flex-1 overflow-y-auto px-6 py-4 space-y-4 ${showAjuda ? "hidden" : ""}`}>
           {/* Período */}
           <div>
             <label className="text-xs font-extrabold uppercase text-slate-500 block mb-1">Período</label>
