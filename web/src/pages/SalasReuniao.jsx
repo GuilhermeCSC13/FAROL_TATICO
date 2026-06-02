@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/tatico/Layout";
 import { supabase } from "../supabaseClient";
+import PrettyDatePicker from "../components/tatico/PrettyDatePicker";
+import PrettyTimePicker from "../components/tatico/PrettyTimePicker";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,6 +16,9 @@ import {
   Save,
   DoorOpen,
   Users,
+  Calendar,
+  Clock,
+  User,
 } from "lucide-react";
 import {
   addDays,
@@ -67,6 +72,78 @@ function combinaDataHora(dateStr, hora) {
   // dateStr "yyyy-MM-dd", hora "HH:mm" → "yyyy-MM-ddTHH:mm:00"
   const t = String(hora || "").substring(0, 5);
   return `${dateStr}T${t.length === 5 ? t : "00:00"}:00`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Popup pequeno: detalhes da reserva ao clicar
+// ─────────────────────────────────────────────────────────────────────────
+function PopupInfoReserva({ aberto, reserva, salaCor, onClose, onEditar, onExcluir }) {
+  if (!aberto || !reserva) return null;
+  const dt = parseDataLocal(reserva.data_hora_inicio);
+  const dataStr = dt ? format(dt, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : "";
+  const horaIni = extractTime(reserva.data_hora_inicio);
+  const horaFim = extractTime(reserva.data_hora_fim);
+
+  return (
+    <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border-t-4"
+        style={{ borderTopColor: salaCor || "#3B82F6" }}
+      >
+        <div className="px-5 py-4">
+          <div className="text-[10px] uppercase tracking-wider font-black text-slate-400 mb-0.5">
+            Reserva de sala
+          </div>
+          <div className="text-base font-black text-slate-800 mb-3">
+            {reserva.titulo}
+          </div>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 text-slate-600">
+              <Calendar size={14} className="text-blue-600" />
+              <span className="capitalize">{dataStr}</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-600">
+              <Clock size={14} className="text-blue-600" />
+              <b>{horaIni}</b> até <b>{horaFim}</b>
+            </div>
+            <div className="flex items-center gap-2 text-slate-600">
+              <User size={14} className="text-blue-600" />
+              {reserva.responsavel || "—"}
+            </div>
+            {reserva.observacoes && (
+              <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                {reserva.observacoes}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+          <button
+            onClick={onExcluir}
+            className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center gap-1"
+          >
+            <Trash2 size={12} /> Excluir
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-800"
+            >
+              Fechar
+            </button>
+            <button
+              onClick={onEditar}
+              className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-1"
+            >
+              <Pencil size={12} /> Editar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -204,29 +281,23 @@ function ModalReserva({ aberto, reserva, salas, salaIdInicial, dataInicial, onCl
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-extrabold uppercase text-slate-500 block mb-1">Data</label>
-              <input
-                type="date"
+              <PrettyDatePicker
                 value={form.data}
-                onChange={(e) => setForm((p) => ({ ...p, data: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2"
+                onChange={(v) => setForm((p) => ({ ...p, data: v }))}
               />
             </div>
             <div>
               <label className="text-xs font-extrabold uppercase text-slate-500 block mb-1">Início</label>
-              <input
-                type="time"
+              <PrettyTimePicker
                 value={form.hora_inicio}
-                onChange={(e) => setForm((p) => ({ ...p, hora_inicio: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2"
+                onChange={(v) => setForm((p) => ({ ...p, hora_inicio: v }))}
               />
             </div>
             <div>
               <label className="text-xs font-extrabold uppercase text-slate-500 block mb-1">Fim</label>
-              <input
-                type="time"
+              <PrettyTimePicker
                 value={form.hora_fim}
-                onChange={(e) => setForm((p) => ({ ...p, hora_fim: e.target.value }))}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2"
+                onChange={(v) => setForm((p) => ({ ...p, hora_fim: v }))}
               />
             </div>
           </div>
@@ -455,6 +526,7 @@ export default function SalasReuniao() {
   const [reservaEdit, setReservaEdit] = useState(null);
   const [reservaDataInicial, setReservaDataInicial] = useState(null);
   const [showGerenciar, setShowGerenciar] = useState(false);
+  const [reservaInfo, setReservaInfo] = useState(null);
 
   useEffect(() => {
     carregar();
@@ -694,7 +766,7 @@ export default function SalasReuniao() {
                             if (isReuniao) {
                               navigate(`/central-reunioes?editId=${it.raw.id}`);
                             } else {
-                              abrirEdit(it.raw);
+                              setReservaInfo(it.raw);
                             }
                           }}
                           className={`rounded-lg border border-l-4 shadow-sm p-2 hover:shadow-md transition cursor-pointer ${
@@ -748,6 +820,28 @@ export default function SalasReuniao() {
         salas={salas}
         onClose={() => setShowGerenciar(false)}
         onChanged={carregar}
+      />
+
+      <PopupInfoReserva
+        aberto={!!reservaInfo}
+        reserva={reservaInfo}
+        salaCor={salaAtual?.cor}
+        onClose={() => setReservaInfo(null)}
+        onEditar={() => {
+          abrirEdit(reservaInfo);
+          setReservaInfo(null);
+        }}
+        onExcluir={async () => {
+          if (!reservaInfo?.id) return;
+          if (!confirm("Excluir essa reserva?")) return;
+          const { error } = await supabase
+            .from("reservas_salas")
+            .delete()
+            .eq("id", reservaInfo.id);
+          if (error) return alert("Erro: " + error.message);
+          setReservaInfo(null);
+          carregar();
+        }}
       />
     </Layout>
   );
