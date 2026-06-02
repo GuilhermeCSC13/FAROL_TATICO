@@ -31,6 +31,7 @@ import {
   XCircle,
   Mail,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useRecording } from "../context/RecordingContext";
 import ModalDetalhesAcao from "../components/tatico/ModalDetalhesAcao";
 
@@ -151,6 +152,7 @@ function safeArray(v) {
    Page
 ========================= */
 export default function Copiloto() {
+  const navigate = useNavigate();
   const { isRecording, isProcessing, timer, startRecording, stopRecording, current } =
     useRecording();
 
@@ -954,7 +956,7 @@ export default function Copiloto() {
             <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
               <Bot size={20} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-xs uppercase tracking-wider text-slate-500 font-extrabold">
                 Assistente
               </div>
@@ -962,6 +964,14 @@ export default function Copiloto() {
                 Copiloto de Reuniões
               </h1>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate("/central-reunioes?new=1")}
+              className="flex-none bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              title="Criar nova reunião"
+            >
+              <Plus size={14} /> Nova
+            </button>
           </div>
 
           <div className="flex gap-2 mb-3">

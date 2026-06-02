@@ -157,6 +157,7 @@ async function salvarParticipantesManuais(reuniaoId, participantes) {
 export default function CentralReunioes() {
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get("editId");
+  const newParam = new URLSearchParams(location.search).get("new");
   const [view, setView] = useState("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [reunioes, setReunioes] = useState([]);
@@ -165,6 +166,7 @@ export default function CentralReunioes() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReuniao, setEditingReuniao] = useState(null);
   const [queryEditHandledId, setQueryEditHandledId] = useState("");
+  const [queryNewHandled, setQueryNewHandled] = useState(false);
 
   // Estados para Exclusão Segura
   const [showDeleteAuth, setShowDeleteAuth] = useState(false);
@@ -302,6 +304,12 @@ export default function CentralReunioes() {
       setQueryEditHandledId(editId);
     }
   }, [editId, reunioes, isModalOpen, queryEditHandledId]);
+
+  useEffect(() => {
+    if (!newParam || queryNewHandled || isModalOpen) return;
+    onDateClick(new Date());
+    setQueryNewHandled(true);
+  }, [newParam, queryNewHandled, isModalOpen]);
 
   const cancelarReuniao = async () => {
     if (!editingReuniao?.id) return;
