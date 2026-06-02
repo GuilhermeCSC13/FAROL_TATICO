@@ -275,7 +275,7 @@ export default function TiposReuniao() {
   const [loading, setLoading] = useState(true);
   const [tipos, setTipos] = useState([]);
   const [q, setQ] = useState("");
-  const [view, setView] = useState("cards");
+  const [view, setView] = useState("table");
 
   const [counts, setCounts] = useState({});
   const [countsLoading, setCountsLoading] = useState(false);
@@ -546,8 +546,54 @@ export default function TiposReuniao() {
         const { error } = await supabase.from("tipos_reuniao").insert(payload);
         if (error) throw error;
       } else {
+        // Detecta mudança de horário para oferecer propagar pras reuniões futuras
+        const original = tipos.find((t) => String(t.id) === String(form.id));
+        const horaIniNovo = form.horario_inicio || null;
+        const horaFimNovo = form.horario_fim || null;
+        const horaIniAntigo = original?.horario_inicio
+          ? String(original.horario_inicio).substring(0, 5)
+          : null;
+        const horaFimAntigo = original?.horario_fim
+          ? String(original.horario_fim).substring(0, 5)
+          : null;
+        const mudouHora =
+          (horaIniNovo && horaIniNovo !== horaIniAntigo) ||
+          (horaFimNovo && horaFimNovo !== horaFimAntigo);
+
         const { error } = await supabase.from("tipos_reuniao").update(payload).eq("id", form.id);
         if (error) throw error;
+
+        if (mudouHora && horaIniNovo && horaFimNovo) {
+          const ok = window.confirm(
+            `Você mudou o horário deste Tipo para ${horaIniNovo} → ${horaFimNovo}.\n\nAplicar nas reuniões futuras vinculadas a este Tipo?`
+          );
+          if (ok) {
+            const hoje = new Date().toISOString();
+            const { data: futuras } = await supabase
+              .from("reunioes")
+              .select("id, data_hora")
+              .eq("tipo_reuniao_id", form.id)
+              .gte("data_hora", hoje);
+            if (futuras?.length) {
+              await Promise.all(
+                futuras.map((f) => {
+                  const dia = String(f.data_hora || "").split("T")[0];
+                  return supabase
+                    .from("reunioes")
+                    .update({
+                      data_hora: `${dia}T${horaIniNovo}:00`,
+                      horario_inicio: `${dia}T${horaIniNovo}:00`,
+                      horario_fim: `${dia}T${horaFimNovo}:00`,
+                    })
+                    .eq("id", f.id);
+                })
+              );
+              alert(`Horário aplicado em ${futuras.length} reunião(ões) futura(s).`);
+            } else {
+              alert("Nenhuma reunião futura encontrada pra atualizar.");
+            }
+          }
+        }
       }
 
       setFormOpen(false);
@@ -788,24 +834,26 @@ export default function TiposReuniao() {
                   return (
                     <div
                       key={t.id}
-                      className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group"
+                      onClick={() => openEdit(t)}
+                      className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group cursor-pointer"
+                      title="Clique para editar"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <button onClick={() => openDrawer(t)} className="min-w-0 text-left" title="Abrir detalhes">
+                        <div className="min-w-0">
                           <h3 className="font-bold text-gray-900 text-base truncate group-hover:text-blue-700 transition-colors">
                             {t?.nome || "Sem nome"}
                           </h3>
                           <p className="text-xs text-gray-500 mt-0.5 truncate">{t?.slug ? `slug: ${t.slug}` : "slug: —"}</p>
-                        </button>
+                        </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <div
                             className="w-3 h-3 rounded-full mt-1 shrink-0"
                             style={{ backgroundColor: t?.cor || "#3B82F6" }}
                             title={t?.cor || "Sem cor"}
                           />
-                          <button onClick={() => openEdit(t)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600" title="Editar">
-                            <Pencil size={16} />
+                          <button onClick={() => openDrawer(t)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600" title="Ver reuniões">
+                            <ArrowRight size={16} />
                           </button>
                           <button onClick={() => requestDelete(t)} className="p-2 rounded-lg hover:bg-red-50 text-red-600" title="Excluir">
                             <Trash2 size={16} />
@@ -831,7 +879,7 @@ export default function TiposReuniao() {
                         <p className="text-sm text-gray-700 mt-1 line-clamp-3">{preview || "Sem ATA cadastrada."}</p>
                       </div>
 
-                      <div className="mt-4 flex items-center justify-between">
+                      <div className="mt-4 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => openDrawer(t)}
                           className="text-blue-700 font-bold text-sm flex items-center gap-2 opacity-80 group-hover:opacity-100"
@@ -846,51 +894,84 @@ export default function TiposReuniao() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border border-gray-200">
+                  <thead className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-200">
                     <tr>
-                      <th className="text-left px-3 py-2 font-bold text-gray-600">Nome</th>
-                      <th className="text-left px-3 py-2 font-bold text-gray-600">Periodicidade</th>
-                      <th className="text-left px-3 py-2 font-bold text-gray-600">Dias</th>
-                      <th className="text-left px-3 py-2 font-bold text-gray-600">Horário</th>
-                      <th className="text-left px-3 py-2 font-bold text-gray-600">Reuniões</th>
-                      <th className="text-right px-3 py-2 font-bold text-gray-600">Ações</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Tipo</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Periodicidade</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Dias</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Horário</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Reuniões</th>
+                      <th className="text-right px-4 py-3 text-[11px] font-black text-slate-500 uppercase tracking-wider">Ações</th>
                     </tr>
                   </thead>
-                  <tbody className="border border-gray-200">
+                  <tbody className="divide-y divide-slate-100">
                     {tiposFiltrados.map((t) => {
                       const periodicidade =
                         PERIODICIDADES.find((p) => p.value === t?.periodicidade)?.label || t?.periodicidade || "—";
                       const c = counts[t.id];
+                      const cor = t?.cor || "#3B82F6";
 
                       return (
-                        <tr key={t.id} className="border-t border-gray-100 hover:bg-blue-50/20">
-                          <td className="px-3 py-2">
-                            <button onClick={() => openDrawer(t)} className="font-bold text-gray-900 hover:text-blue-700" title="Abrir detalhes">
-                              {t?.nome || "Sem nome"}
-                            </button>
-                            <div className="text-xs text-gray-500">{t?.slug ? `slug: ${t.slug}` : "slug: —"}</div>
+                        <tr
+                          key={t.id}
+                          onClick={() => openEdit(t)}
+                          className="cursor-pointer hover:bg-blue-50/40 transition-colors group"
+                          title="Clique para editar"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <span
+                                className="w-3 h-3 rounded-full flex-none ring-2 ring-white shadow"
+                                style={{ backgroundColor: cor }}
+                              />
+                              <div className="min-w-0">
+                                <div className="font-black text-slate-800 group-hover:text-blue-700 truncate">
+                                  {t?.nome || "Sem nome"}
+                                </div>
+                                <div className="text-[11px] text-slate-400 truncate">
+                                  {t?.slug ? `slug: ${t.slug}` : "—"}
+                                </div>
+                              </div>
+                            </div>
                           </td>
-                          <td className="px-3 py-2">{periodicidade}</td>
-                          <td className="px-3 py-2">{formatDiasSemana(t?.dias_semana)}</td>
-                          <td className="px-3 py-2">
-                            {formatHora(t?.horario_inicio)} • {formatHora(t?.horario_fim)}
+                          <td className="px-4 py-3">
+                            <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">
+                              {periodicidade}
+                            </span>
                           </td>
-                          <td className="px-3 py-2">{c === null || c === undefined ? "—" : c}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="px-4 py-3 text-xs text-slate-600 font-semibold">
+                            {formatDiasSemana(t?.dias_semana)}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-bold text-slate-700">
+                            {formatHora(t?.horario_inicio)} <span className="text-slate-300">→</span> {formatHora(t?.horario_fim)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-blue-50 text-blue-700 font-black text-xs">
+                              {c === null || c === undefined ? "—" : c}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => openDrawer(t)}
+                                className="px-2.5 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                title="Ver reuniões"
+                              >
+                                <ArrowRight size={14} />
+                              </button>
                               <button
                                 onClick={() => openEdit(t)}
-                                className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 border border-gray-200 font-bold text-gray-800"
+                                className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-xs"
                                 title="Editar"
                               >
                                 Editar
                               </button>
                               <button
                                 onClick={() => requestDelete(t)}
-                                className="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 font-bold text-red-700"
+                                className="px-2.5 py-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700"
                                 title="Excluir"
                               >
-                                Excluir
+                                <X size={14} />
                               </button>
                             </div>
                           </td>

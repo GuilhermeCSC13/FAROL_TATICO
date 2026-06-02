@@ -952,6 +952,56 @@ export default function CentralReunioes() {
                 isRealizada={formData.status === "Realizada"}
                 onDeleteRequest={handleDeleteClick}
                 onCancelRequest={cancelarReuniao} // ✅ NOVO
+                onAplicarHorarioSerie={async () => {
+                  if (!editingReuniao?.id) return;
+                  if (!formData.hora_inicio || !formData.hora_fim) {
+                    return alert("Defina hora de início e fim primeiro.");
+                  }
+                  const tipoId = editingReuniao.tipo_reuniao_id || formData.tipo_reuniao_id;
+                  if (!tipoId) {
+                    return alert("Esta reunião não tem Tipo definido. Não consigo achar a série.");
+                  }
+                  const tituloSerie = editingReuniao.titulo || formData.titulo || "";
+                  const ok = window.confirm(
+                    `Aplicar o horário ${formData.hora_inicio} → ${formData.hora_fim} em todas as reuniões futuras desta série (mesmo Tipo${tituloSerie ? ` e título "${tituloSerie}"` : ""})?`
+                  );
+                  if (!ok) return;
+                  try {
+                    const baseDataHora = editingReuniao.data_hora;
+                    // Acha futuras da mesma série (mesmo tipo, mesmo título, data >= atual)
+                    let query = supabase
+                      .from("reunioes")
+                      .select("id, data_hora, titulo, tipo_reuniao_id")
+                      .eq("tipo_reuniao_id", tipoId)
+                      .gte("data_hora", baseDataHora);
+                    if (tituloSerie) query = query.eq("titulo", tituloSerie);
+                    const { data: futuras, error: errF } = await query;
+                    if (errF) throw errF;
+
+                    const updates = (futuras || []).map((f) => {
+                      const dia = String(f.data_hora || "").split("T")[0];
+                      return supabase
+                        .from("reunioes")
+                        .update({
+                          data_hora: `${dia}T${formData.hora_inicio}:00`,
+                          horario_inicio: `${dia}T${formData.hora_inicio}:00`,
+                          horario_fim: `${dia}T${formData.hora_fim}:00`,
+                        })
+                        .eq("id", f.id);
+                    });
+                    const results = await Promise.all(updates);
+                    const failed = results.filter((r) => r.error).length;
+                    await fetchReunioes();
+                    alert(
+                      `Horário aplicado em ${results.length - failed} reuni${
+                        results.length - failed === 1 ? "ão" : "ões"
+                      }.` + (failed ? ` ${failed} falharam.` : "")
+                    );
+                  } catch (e) {
+                    console.error(e);
+                    alert("Erro ao aplicar: " + (e?.message || e));
+                  }
+                }}
               />
             </form>
 

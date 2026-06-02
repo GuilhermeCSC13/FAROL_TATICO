@@ -60,12 +60,21 @@ function parseDataLocal(s) {
   }
 }
 
-function extractTime(s) {
-  if (!s) return "";
-  const str = String(s);
-  if (str.includes("T")) return str.split("T")[1].substring(0, 5);
-  if (str.includes(":")) return str.substring(0, 5);
-  return "";
+function extractTime(value) {
+  if (!value) return "";
+  const s = String(value);
+  let core = s;
+  if (core.includes("T")) core = core.split("T")[1] || "";
+  else if (core.includes(" ")) core = core.split(" ").pop() || "";
+  // remove zona/offset
+  core = core.replace(/Z$/i, "").split(/[+\-]/)[0].trim();
+  if (!core.includes(":")) return "";
+  const segs = core.split(":");
+  if (segs.length < 2) return "";
+  const hh = String(segs[0]).padStart(2, "0").slice(0, 2);
+  const mm = String(segs[1]).padStart(2, "0").slice(0, 2);
+  if (Number.isNaN(Number(hh)) || Number.isNaN(Number(mm))) return "";
+  return `${hh}:${mm}`;
 }
 
 function combinaDataHora(dateStr, hora) {
@@ -112,8 +121,17 @@ function PopupInfoReserva({ aberto, item, salaCor, onClose, onEditar, onExcluir 
             </div>
             <div className="flex items-center gap-2 text-slate-600">
               <Clock size={14} className="text-blue-600" />
-              <b>{horaIni}</b> até <b>{horaFim}</b>
+              <b>{horaIni || "—"}</b> até <b>{horaFim || "—"}</b>
             </div>
+            {item.responsavel && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <User size={14} className="text-blue-600" />
+                <span>
+                  {isReuniao ? "Responsável: " : "Reservado por: "}
+                  <b>{item.responsavel}</b>
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
@@ -514,8 +532,8 @@ function ModalGerenciarSalas({ aberto, salas, onClose, onChanged }) {
 // ─────────────────────────────────────────────────────────────────────────
 // Timeline semanal estilo Google Agenda
 // ─────────────────────────────────────────────────────────────────────────
-const HOUR_START = 6;
-const HOUR_END = 21; // exclusivo no rendering, mostra 6..20
+const DEFAULT_START = 8;
+const DEFAULT_END = 18; // exclusivo, mostra 8..17
 const HOUR_HEIGHT = 56; // px por hora
 
 function timeToMinutes(s) {
@@ -524,26 +542,41 @@ function timeToMinutes(s) {
   return h * 60 + (m || 0);
 }
 
-function getTopPx(timeStr) {
-  const min = timeToMinutes(timeStr);
-  const offset = min - HOUR_START * 60;
-  return Math.max(0, (offset / 60) * HOUR_HEIGHT);
-}
-
-function getHeightPx(iniStr, fimStr) {
-  const ini = timeToMinutes(iniStr);
-  const fim = timeToMinutes(fimStr);
-  const dur = Math.max(15, fim - ini);
-  return (dur / 60) * HOUR_HEIGHT;
-}
-
 function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick, salaCor }) {
+  // Determina range dinamicamente: 8h–18h por padrão, expande se houver
+  // itens fora dessa janela (preserva visibilidade).
+  const [hourStart, hourEnd] = useMemo(() => {
+    let s = DEFAULT_START;
+    let e = DEFAULT_END;
+    for (const lista of reservasPorDia.values()) {
+      for (const it of lista) {
+        const i = Math.floor(timeToMinutes(it.inicio) / 60);
+        const f = Math.ceil(timeToMinutes(it.fim) / 60);
+        if (i < s) s = i;
+        if (f > e) e = f;
+      }
+    }
+    return [Math.max(0, s), Math.min(24, e + 1)]; // +1 pra mostrar a hora inteira final
+  }, [reservasPorDia]);
+
   const horas = useMemo(() => {
     const arr = [];
-    for (let h = HOUR_START; h < HOUR_END; h++) arr.push(h);
+    for (let h = hourStart; h < hourEnd; h++) arr.push(h);
     return arr;
-  }, []);
-  const totalHeight = (HOUR_END - HOUR_START) * HOUR_HEIGHT;
+  }, [hourStart, hourEnd]);
+  const totalHeight = (hourEnd - hourStart) * HOUR_HEIGHT;
+
+  const getTopPx = (timeStr) => {
+    const min = timeToMinutes(timeStr);
+    const offset = min - hourStart * 60;
+    return Math.max(0, (offset / 60) * HOUR_HEIGHT);
+  };
+  const getHeightPx = (iniStr, fimStr) => {
+    const ini = timeToMinutes(iniStr);
+    const fim = timeToMinutes(fimStr);
+    const dur = Math.max(15, fim - ini);
+    return (dur / 60) * HOUR_HEIGHT;
+  };
 
   return (
     <div className="flex-1 overflow-auto">
@@ -611,7 +644,7 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
 
                   {/* Linha de "agora" */}
                   {ehHoje && (
-                    <NowLine />
+                    <NowLine hourStart={hourStart} hourEnd={hourEnd} />
                   )}
 
                   {/* Itens posicionados */}
@@ -641,7 +674,7 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
                         title={`${it.titulo} • ${extractTime(it.inicio)} - ${extractTime(it.fim)}`}
                       >
                         <div className="text-[9px] font-black text-slate-600 leading-tight flex items-center gap-1">
-                          {extractTime(it.inicio)} - {extractTime(it.fim)}
+                          {extractTime(it.inicio)} <span className="text-slate-300">→</span> {extractTime(it.fim)}
                           {isReuniao && (
                             <span className="ml-auto text-[8px] font-black tracking-wide text-violet-700 bg-violet-200/80 px-1 rounded">
                               AGENDA
@@ -651,8 +684,9 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
                         <div className="text-[11px] font-black text-slate-800 leading-tight mt-0.5 line-clamp-2">
                           {it.titulo}
                         </div>
-                        {h > 50 && it.responsavel && (
-                          <div className="text-[9px] text-slate-500 truncate mt-0.5">
+                        {it.responsavel && (
+                          <div className="text-[9px] text-slate-600 font-semibold truncate mt-0.5 flex items-center gap-1">
+                            <User size={9} className="flex-none opacity-60" />
                             {it.responsavel}
                           </div>
                         )}
@@ -669,15 +703,15 @@ function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick,
   );
 }
 
-function NowLine() {
+function NowLine({ hourStart, hourEnd }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
   const minutos = now.getHours() * 60 + now.getMinutes();
-  const offset = minutos - HOUR_START * 60;
-  if (offset < 0 || offset > (HOUR_END - HOUR_START) * 60) return null;
+  const offset = minutos - hourStart * 60;
+  if (offset < 0 || offset > (hourEnd - hourStart) * 60) return null;
   const top = (offset / 60) * HOUR_HEIGHT;
   return (
     <div
@@ -761,8 +795,11 @@ export default function SalasReuniao() {
       .filter((r) => String(r.sala_id) === salaIdStr)
       .map((r) => {
         const dia = String(r.data_hora || "").split("T")[0];
-        const hi = (r.horario_inicio || extractTime(r.data_hora) || "09:00").substring(0, 5);
-        const hf = (r.horario_fim || "10:00").substring(0, 5);
+        const hi =
+          extractTime(r.horario_inicio) ||
+          extractTime(r.data_hora) ||
+          "09:00";
+        const hf = extractTime(r.horario_fim) || "10:00";
         return {
           kind: "reuniao",
           id: `reuniao-${r.id}`,
