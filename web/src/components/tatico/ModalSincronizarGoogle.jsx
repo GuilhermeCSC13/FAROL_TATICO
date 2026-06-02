@@ -141,6 +141,7 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
   if (!aberto) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
@@ -353,10 +354,11 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
           </div>
         </div>
       </div>
+    </div>
 
-      {/* Popup de Passo a passo (em cima do modal principal) */}
-      {showAjuda && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+    {/* Popup de Passo a passo — separado, em cima de tudo */}
+    {showAjuda && (
+      <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
             <div className="px-7 py-5 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -465,7 +467,7 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
             </div>
           </div>
         </div>
-      )}
-    </div>
+    )}
+    </>
   );
 }
