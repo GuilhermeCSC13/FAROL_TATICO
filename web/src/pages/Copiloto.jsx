@@ -1736,13 +1736,13 @@ export default function Copiloto() {
                 <li className="flex gap-3">
                   <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">1</span>
                   <span>
-                    Na janela de compartilhamento do Chrome, escolha a aba <b>“Janela”</b> (e não <b>“Tela inteira”</b>).
+                    Na janela de compartilhamento do Chrome, escolha a aba <b>“Tela inteira”</b>.
                   </span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex-none w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center">2</span>
                   <span>
-                    Selecione a janela que será apresentada (ex.: PowerPoint, navegador, Teams).
+                    Selecione a tela onde a reunião acontecerá e clique em <b>Compartilhar</b>.
                   </span>
                 </li>
                 <li className="flex gap-3">
