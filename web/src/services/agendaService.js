@@ -4,12 +4,13 @@ import {
   buildDateTimeValue,
   extractTimeValue,
   generateRecurringDates,
+  parseSafeDate,
   sortUniqueDates,
 } from "./agendaDates";
 
 export const gerarDatasRecorrentes = (dataInicialISO, regra, qtd = 12) => {
   const datas = [];
-  let dataBase = new Date(dataInicialISO);
+  let dataBase = parseSafeDate(dataInicialISO);
 
   for (let i = 0; i < qtd; i += 1) {
     datas.push(new Date(dataBase));

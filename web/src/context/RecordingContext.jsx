@@ -629,6 +629,7 @@ export function RecordingProvider({ children }) {
         gravacao_session_id: sessionId,
         gravacao_bucket: STORAGE_BUCKET,
         gravacao_prefix: `reunioes/${reuniaoId}/${sessionId}/`,
+        horario_inicio: nowIso(),
         gravacao_inicio: nowIso(),
         updated_at: nowIso(),
       })
@@ -758,6 +759,7 @@ export function RecordingProvider({ children }) {
           .update({
             status: "Realizada",
             duracao_segundos: duracao,
+            horario_fim: nowIso(),
             gravacao_fim: nowIso(),
             gravacao_status: "PROCESSANDO",
             gravacao_path: firstPartPath,

@@ -30,6 +30,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { salvarReuniao, atualizarReuniao } from "../services/agendaService";
+import { parseSafeDate } from "../services/agendaDates";
 import { sortUniqueDates } from "../services/agendaDates";
 import DetalhesReuniao from "../components/tatico/DetalhesReuniao";
 
@@ -56,11 +57,19 @@ function extractTime(dateString) {
 // ✅ 2. FORMATAR INTERVALO VISUAL
 function formatTimeRange(reuniao) {
   try {
+    const status = String(reuniao?.status || "").toLowerCase();
+    const horaInicioFonte = status.includes("realiz")
+      ? reuniao.gravacao_inicio || reuniao.horario_inicio || reuniao.data_hora
+      : reuniao.horario_inicio || reuniao.data_hora || reuniao.gravacao_inicio;
+    const horaFimFonte = status.includes("realiz")
+      ? reuniao.gravacao_fim || reuniao.horario_fim || reuniao.data_hora
+      : reuniao.horario_fim || reuniao.gravacao_fim;
+
     const horaIni =
-      extractTime(reuniao.horario_inicio) ||
+      extractTime(horaInicioFonte) ||
       extractTime(reuniao.data_hora) ||
       "--:--";
-    let horaFim = extractTime(reuniao.horario_fim);
+    let horaFim = extractTime(horaFimFonte);
 
     if (!horaFim || horaFim === "") {
       if (reuniao.duracao_segundos) {
@@ -81,13 +90,7 @@ function formatTimeRange(reuniao) {
 }
 
 function parseDataLocal(dataString) {
-  if (!dataString) return new Date();
-  try {
-    const raw = String(dataString).substring(0, 19);
-    return new Date(raw);
-  } catch {
-    return new Date(String(dataString));
-  }
+  return parseSafeDate(dataString);
 }
 
 function statusBadge(status) {
@@ -232,9 +235,12 @@ export default function CentralReunioes() {
     const dt = parseDataLocal(reuniao.data_hora);
     const hhmmIni =
       extractTime(reuniao.horario_inicio) ||
+      extractTime(reuniao.gravacao_inicio) ||
       extractTime(reuniao.data_hora) ||
       "09:00";
-    let hhmmFim = extractTime(reuniao.horario_fim);
+    let hhmmFim =
+      extractTime(reuniao.horario_fim) ||
+      extractTime(reuniao.gravacao_fim);
 
     if (!hhmmFim) {
       hhmmFim = "10:00";

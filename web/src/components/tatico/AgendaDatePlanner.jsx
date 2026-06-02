@@ -152,6 +152,9 @@ export default function AgendaDatePlanner({
             <p className="text-[11px] font-black uppercase tracking-[0.28em] text-sky-700">
               {label}
             </p>
+            <p className="mt-1 text-[11px] font-bold text-red-600">
+              Escolha a melhor visualização para voce
+            </p>
             <p className="mt-1 text-xs text-slate-500">{helperText}</p>
           </div>
 
