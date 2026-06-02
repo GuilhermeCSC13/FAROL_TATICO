@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -54,6 +54,7 @@ export default function AgendaDatePlanner({
 }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(() => parseSafeDate(singleDate || selectedDates[0] || new Date()));
+  const lastSyncedDateRef = useRef("");
 
   const normalizedDates = useMemo(
     () => sortUniqueDates(selectedDates),
@@ -63,7 +64,10 @@ export default function AgendaDatePlanner({
   const primaryDate = normalizeDateKey(singleDate || normalizedDates[0] || new Date());
 
   useEffect(() => {
-    const next = normalizeDateKey(singleDate || normalizedDates[0] || new Date());
+    const next = normalizeDateKey(singleDate || normalizedDates[0] || "");
+    if (!next) return;
+    if (lastSyncedDateRef.current === next) return;
+    lastSyncedDateRef.current = next;
     setCursor(parseSafeDate(next));
   }, [singleDate, normalizedDates]);
 
@@ -109,6 +113,7 @@ export default function AgendaDatePlanner({
 
   const handlePickDate = (dateKey) => {
     const normalized = normalizeDateKey(dateKey);
+    lastSyncedDateRef.current = normalized;
     if (mode === "unica") {
       onSingleDateChange?.(normalized);
       onSelectedDatesChange?.([normalized]);
@@ -131,6 +136,7 @@ export default function AgendaDatePlanner({
     if (!singleDate) onSingleDateChange?.(base);
     updateDates(generated);
     setCursor(parseSafeDate(base));
+    lastSyncedDateRef.current = normalizeDateKey(base);
   };
 
   const clearDates = () => {

@@ -86,7 +86,7 @@ export function generateRecurringDates(baseDate, rule, count = 6) {
     if (normalizedRule === "semanal") {
       current = addDays(current, 7);
     } else if (normalizedRule === "quinzenal" || normalizedRule === "15 dias") {
-      current = addDays(current, 15);
+      current = addDays(current, 14);
     } else if (normalizedRule === "mensal") {
       current = addMonths(current, 1);
     } else if (normalizedRule === "bissemanal") {
