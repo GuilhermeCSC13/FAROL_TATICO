@@ -6,6 +6,7 @@ import {
 import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide-react';
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
 import { useSearchParams } from 'react-router-dom';
+import { getMesAtualFarol } from '../utils/farolUtils';
 
 const IDS_ADMIN = [7, 8]; // 7 = Financeiro, 8 = Pessoas
 
@@ -30,7 +31,7 @@ const AdministrativoResumo = () => {
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
-  const [mesSelecionado, setMesSelecionado] = useState(1); // Jan/26
+  const [mesSelecionado, setMesSelecionado] = useState(getMesAtualFarol())
   const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || "7");
 
   const [metrics, setMetrics] = useState({

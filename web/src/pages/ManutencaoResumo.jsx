@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { useSearchParams } from "react-router-dom";
+import { getMesAtualFarol } from '../utils/farolUtils';
 
 const ID_GESTAO_FROTA = 2;
 const ID_PCM = 9;
@@ -71,7 +72,7 @@ const ManutencaoResumo = () => {
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
 
-  const [mesSelecionado, setMesSelecionado] = useState(1);
+  const [mesSelecionado, setMesSelecionado] = useState(getMesAtualFarol());
   const [areaFiltro, setAreaFiltro] = useState(searchParams.get("area") || String(ID_GESTAO_FROTA));
 
   const [metrics, setMetrics] = useState({

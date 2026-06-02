@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { AlertTriangle, TrendingUp, CheckCircle, Target, Settings } from 'lucide-react';
 import ConfiguracaoGeral from '../components/tatico/ConfiguracaoGeral';
+import { getMesAtualFarol } from '../utils/farolUtils';
 
 // ID da área Moov
 const ID_MOOV = 3;
@@ -30,7 +31,7 @@ const MoovResumo = () => {
   const [showConfig, setShowConfig] = useState(false);
 
   // Filtro de mês (igual modelo)
-  const [mesSelecionado, setMesSelecionado] = useState(1); // 1 = Jan/26
+  const [mesSelecionado, setMesSelecionado] = useState(getMesAtualFarol())
 
   const [metrics, setMetrics] = useState({
     scoreAtual: 0,

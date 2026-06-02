@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import ConfiguracaoGeral from "../components/tatico/ConfiguracaoGeral";
 import { Settings, Download, ChevronDown } from "lucide-react";
 import html2canvas from "html2canvas";
+import { exportFullElementAsImage, formatFarolValue } from "../utils/farolUtils";
 import useResponsavelFiltro from "../components/tatico/useResponsavelFiltro";
 
 const ID_MOOV = 3;
@@ -386,44 +387,31 @@ const MoovMetas = () => {
   const exportFarol = async (format = "png") => {
     try {
       setOpenExport(false);
-      const el = tableWrapRef.current;
-      if (!el) return;
+      const areaName = "Moov";
 
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
+      await exportFullElementAsImage({
+        element: tableWrapRef.current,
+        html2canvas,
+        fileName: `Farol_${areaName}_2026`,
+        format,
       });
-
-      const mime = format === "jpg" ? "image/jpeg" : "image/png";
-      const ext = format === "jpg" ? "jpg" : "png";
-
-      const dataUrl = canvas.toDataURL(
-        mime,
-        format === "jpg" ? 0.92 : undefined
-      );
-      const a = document.createElement("a");
-
-      a.href = dataUrl;
-      a.download = `Farol_Moov_2026.${ext}`;
-      a.click();
     } catch (e) {
       console.error("Erro ao exportar farol:", e);
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded shadow-sm overflow-hidden font-sans">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-800">
-            Farol de Metas — Moov
-          </h2>
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm overflow-hidden font-sans border border-slate-200">
+      <div className="flex flex-col gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50 xl:flex-row xl:items-center xl:justify-between">
+        <h2 className="text-lg font-black tracking-tight text-slate-900">
+          Farol de Metas — {"Moov"}
+        </h2>
 
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <button
               onClick={() => setOpenExport((s) => !s)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
               title="Baixar Farol"
             >
               <Download size={16} />
@@ -449,25 +437,12 @@ const MoovMetas = () => {
             )}
           </div>
 
-          <div className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded border border-blue-100">
-            MOOV
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => (window.location.hash = "rotinas")}
-            className="px-3 py-1 text-sm font-medium text-gray-500 hover:text-blue-600 hover:bg-gray-100 rounded transition-colors"
-          >
-            Ir para Rotinas
-          </button>
-
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-semibold">Responsável:</span>
             <select
               value={responsavelFiltro}
               onChange={(e) => setResponsavelFiltro(e.target.value)}
-              className="text-xs bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos</option>
               {responsaveis.map((nome) => (
@@ -480,7 +455,7 @@ const MoovMetas = () => {
 
           <button
             onClick={() => setShowConfig(true)}
-            className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-gray-100"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600"
             title="Configurações"
           >
             <Settings size={18} />
@@ -575,7 +550,7 @@ const MoovMetas = () => {
                                 defaultValue={
                                   valorRealizado === ""
                                     ? ""
-                                    : String(valorRealizado)
+                                    : formatFarolValue(valorRealizado, meta.unidade)
                                 }
                                 onBlur={(e) =>
                                   handleSave(meta.id, 14, e.target.value, meta)
@@ -640,7 +615,7 @@ const MoovMetas = () => {
                           <div className="flex flex-col h-full justify-between">
                             <div className="text-[11px] text-blue-700 font-semibold text-right px-1 pt-0.5 bg-white/40">
                               {dados.alvo !== null && dados.alvo !== undefined
-                                ? Number(dados.alvo).toFixed(2)
+                                ? formatFarolValue(dados.alvo, meta.unidade)
                                 : ""}
                             </div>
 
@@ -652,7 +627,7 @@ const MoovMetas = () => {
                               defaultValue={
                                 valorRealizado === ""
                                   ? ""
-                                  : String(valorRealizado)
+                                  : formatFarolValue(valorRealizado, meta.unidade)
                               }
                               onBlur={(e) =>
                                 handleSave(

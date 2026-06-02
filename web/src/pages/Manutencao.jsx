@@ -38,7 +38,6 @@ const Manutencao = () => {
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-600">Manutenção</p>
               <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">{subsetor}</h1>
-              <p className="mt-1 text-sm text-slate-500">Visão Geral, Farol de Metas e Farol de Rotinas focados somente neste subsetor.</p>
             </div>
 
             <div className="inline-flex w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-inner sm:w-auto">
