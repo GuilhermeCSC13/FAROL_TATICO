@@ -133,8 +133,6 @@ export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) =
   // 1) Sempre atualiza a reunião atual (por ID)
   const payloadAtual = { ...novosDados };
 
-  delete payloadAtual.horario_inicio;
-  delete payloadAtual.horario_fim;
   if (payloadAtual.materiais === undefined) delete payloadAtual.materiais;
 
   if (modo === "multipla" || modo === "multiple") {
