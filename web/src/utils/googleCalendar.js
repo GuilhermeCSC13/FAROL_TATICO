@@ -363,6 +363,32 @@ export async function upsertCalendarEvent(reuniao, tipoNome, tipoCor) {
 // compat: createCalendarEvent agora é alias do upsert
 export const createCalendarEvent = (r, t, c) => upsertCalendarEvent(r, t, c);
 
+// Tenta apagar o evento do Google Calendar correspondente a uma reunião do Farol.
+// Silencioso se o usuário não está conectado ou se o evento não existir.
+// Retorna { ok, deleted: boolean, error? }
+export async function deleteCalendarEventByReuniaoId(reuniaoId) {
+  try {
+    if (!isGoogleConnected()) return { ok: true, deleted: false };
+    const token = await ensureGoogleToken();
+    const existingId = await findExistingEventId(token.access_token, reuniaoId);
+    if (!existingId) return { ok: true, deleted: false };
+
+    const r = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(existingId)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token.access_token}` },
+      }
+    );
+    // 204 = sucesso, 410 = já apagado (considera ok)
+    if (r.ok || r.status === 410) return { ok: true, deleted: true };
+    const text = await r.text();
+    return { ok: false, deleted: false, error: `HTTP ${r.status}: ${text}` };
+  } catch (e) {
+    return { ok: false, deleted: false, error: e.message || String(e) };
+  }
+}
+
 // Sincroniza um lote. Chama onProgress({ done, total, titulo, ok }) a cada item.
 export async function syncReunioesToGoogle(reunioes, tiposById, onProgress) {
   const total = reunioes.length;

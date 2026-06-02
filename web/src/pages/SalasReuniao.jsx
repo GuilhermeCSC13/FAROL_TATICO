@@ -77,26 +77,32 @@ function combinaDataHora(dateStr, hora) {
 // ─────────────────────────────────────────────────────────────────────────
 // Popup pequeno: detalhes da reserva ao clicar
 // ─────────────────────────────────────────────────────────────────────────
-function PopupInfoReserva({ aberto, reserva, salaCor, onClose, onEditar, onExcluir }) {
-  if (!aberto || !reserva) return null;
-  const dt = parseDataLocal(reserva.data_hora_inicio);
+function PopupInfoReserva({ aberto, item, salaCor, onClose, onEditar, onExcluir }) {
+  if (!aberto || !item) return null;
+  const isReuniao = item.kind === "reuniao";
+  const dt = parseDataLocal(item.inicio);
   const dataStr = dt ? format(dt, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : "";
-  const horaIni = extractTime(reserva.data_hora_inicio);
-  const horaFim = extractTime(reserva.data_hora_fim);
+  const horaIni = extractTime(item.inicio);
+  const horaFim = extractTime(item.fim);
 
   return (
     <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border-t-4"
-        style={{ borderTopColor: salaCor || "#3B82F6" }}
+        style={{ borderTopColor: isReuniao ? "#8B5CF6" : (salaCor || "#3B82F6") }}
       >
         <div className="px-5 py-4">
-          <div className="text-[10px] uppercase tracking-wider font-black text-slate-400 mb-0.5">
-            Reserva de sala
+          <div className="text-[10px] uppercase tracking-wider font-black text-slate-400 mb-0.5 flex items-center gap-2">
+            {isReuniao ? "Reunião da Agenda" : "Reserva de sala"}
+            {isReuniao && (
+              <span className="text-[9px] font-black tracking-wide text-violet-700 bg-violet-100 px-1 rounded">
+                AGENDA
+              </span>
+            )}
           </div>
           <div className="text-base font-black text-slate-800 mb-3">
-            {reserva.titulo}
+            {item.titulo}
           </div>
 
           <div className="space-y-2 text-sm">
@@ -108,24 +114,17 @@ function PopupInfoReserva({ aberto, reserva, salaCor, onClose, onEditar, onExclu
               <Clock size={14} className="text-blue-600" />
               <b>{horaIni}</b> até <b>{horaFim}</b>
             </div>
-            <div className="flex items-center gap-2 text-slate-600">
-              <User size={14} className="text-blue-600" />
-              {reserva.responsavel || "—"}
-            </div>
-            {reserva.observacoes && (
-              <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600">
-                {reserva.observacoes}
-              </div>
-            )}
           </div>
         </div>
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
-          <button
-            onClick={onExcluir}
-            className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center gap-1"
-          >
-            <Trash2 size={12} /> Excluir
-          </button>
+          {!isReuniao ? (
+            <button
+              onClick={onExcluir}
+              className="text-xs font-bold text-red-600 hover:text-red-800 flex items-center gap-1"
+            >
+              <Trash2 size={12} /> Excluir
+            </button>
+          ) : <span />}
           <div className="flex gap-2">
             <button
               onClick={onClose}
@@ -133,12 +132,14 @@ function PopupInfoReserva({ aberto, reserva, salaCor, onClose, onEditar, onExclu
             >
               Fechar
             </button>
-            <button
-              onClick={onEditar}
-              className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-1"
-            >
-              <Pencil size={12} /> Editar
-            </button>
+            {!isReuniao && (
+              <button
+                onClick={onEditar}
+                className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-1"
+              >
+                <Pencil size={12} /> Editar
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -511,6 +512,185 @@ function ModalGerenciarSalas({ aberto, salas, onClose, onChanged }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Timeline semanal estilo Google Agenda
+// ─────────────────────────────────────────────────────────────────────────
+const HOUR_START = 6;
+const HOUR_END = 21; // exclusivo no rendering, mostra 6..20
+const HOUR_HEIGHT = 56; // px por hora
+
+function timeToMinutes(s) {
+  const t = extractTime(s) || "00:00";
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+function getTopPx(timeStr) {
+  const min = timeToMinutes(timeStr);
+  const offset = min - HOUR_START * 60;
+  return Math.max(0, (offset / 60) * HOUR_HEIGHT);
+}
+
+function getHeightPx(iniStr, fimStr) {
+  const ini = timeToMinutes(iniStr);
+  const fim = timeToMinutes(fimStr);
+  const dur = Math.max(15, fim - ini);
+  return (dur / 60) * HOUR_HEIGHT;
+}
+
+function TimelineSemanal({ diasSemana, reservasPorDia, onItemClick, onSlotClick, salaCor }) {
+  const horas = useMemo(() => {
+    const arr = [];
+    for (let h = HOUR_START; h < HOUR_END; h++) arr.push(h);
+    return arr;
+  }, []);
+  const totalHeight = (HOUR_END - HOUR_START) * HOUR_HEIGHT;
+
+  return (
+    <div className="flex-1 overflow-auto">
+      <div className="flex min-w-[860px]">
+        {/* Gutter de horas */}
+        <div className="w-16 flex-none border-r border-slate-100 pt-10">
+          {horas.map((h) => (
+            <div
+              key={h}
+              className="text-[10px] text-slate-400 font-bold text-right pr-2 -translate-y-1.5"
+              style={{ height: HOUR_HEIGHT }}
+            >
+              {String(h).padStart(2, "0")}:00
+            </div>
+          ))}
+        </div>
+
+        {/* 7 colunas dos dias */}
+        <div className="flex-1 grid grid-cols-7">
+          {diasSemana.map((dia) => {
+            const key = format(dia, "yyyy-MM-dd");
+            const lista = reservasPorDia.get(key) || [];
+            const ehHoje = isSameDay(dia, new Date());
+            return (
+              <div key={key} className="border-l border-slate-100 flex flex-col">
+                {/* Header do dia */}
+                <div
+                  className={`px-3 py-2 border-b text-center sticky top-0 bg-white z-20 ${
+                    ehHoje ? "text-blue-700" : "text-slate-500"
+                  }`}
+                  style={{ height: 40 }}
+                >
+                  <div className="text-[10px] uppercase tracking-wide font-bold">
+                    {format(dia, "EEE", { locale: ptBR })}
+                  </div>
+                  <div className={`text-sm font-black ${ehHoje ? "" : "text-slate-700"}`}>
+                    {format(dia, "dd")}
+                  </div>
+                </div>
+
+                {/* Grade da hora + itens */}
+                <div
+                  className="relative cursor-pointer"
+                  style={{ height: totalHeight }}
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) onSlotClick?.(dia);
+                  }}
+                >
+                  {/* Linhas das horas */}
+                  {horas.map((h, i) => (
+                    <div
+                      key={h}
+                      className={`absolute left-0 right-0 border-t ${
+                        i === 0 ? "border-transparent" : "border-slate-100"
+                      }`}
+                      style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
+                    >
+                      {/* meia-hora */}
+                      <div
+                        className="absolute left-0 right-0 border-t border-dashed border-slate-100/60"
+                        style={{ top: HOUR_HEIGHT / 2 }}
+                      />
+                    </div>
+                  ))}
+
+                  {/* Linha de "agora" */}
+                  {ehHoje && (
+                    <NowLine />
+                  )}
+
+                  {/* Itens posicionados */}
+                  {lista.map((it) => {
+                    const isReuniao = it.kind === "reuniao";
+                    const top = getTopPx(it.inicio);
+                    const h = getHeightPx(it.inicio, it.fim);
+                    return (
+                      <button
+                        key={it.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onItemClick?.(it);
+                        }}
+                        className={`absolute left-1 right-1 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition text-left p-1.5 ${
+                          isReuniao
+                            ? "bg-violet-100/80 border border-violet-300 border-dashed"
+                            : "border-l-4 border border-slate-200 bg-white"
+                        }`}
+                        style={{
+                          top,
+                          height: h,
+                          borderLeftColor: isReuniao ? undefined : (salaCor || "#3B82F6"),
+                          backgroundColor: isReuniao ? undefined : `${(salaCor || "#3B82F6")}1A`,
+                        }}
+                        title={`${it.titulo} • ${extractTime(it.inicio)} - ${extractTime(it.fim)}`}
+                      >
+                        <div className="text-[9px] font-black text-slate-600 leading-tight flex items-center gap-1">
+                          {extractTime(it.inicio)} - {extractTime(it.fim)}
+                          {isReuniao && (
+                            <span className="ml-auto text-[8px] font-black tracking-wide text-violet-700 bg-violet-200/80 px-1 rounded">
+                              AGENDA
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-black text-slate-800 leading-tight mt-0.5 line-clamp-2">
+                          {it.titulo}
+                        </div>
+                        {h > 50 && it.responsavel && (
+                          <div className="text-[9px] text-slate-500 truncate mt-0.5">
+                            {it.responsavel}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NowLine() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const minutos = now.getHours() * 60 + now.getMinutes();
+  const offset = minutos - HOUR_START * 60;
+  if (offset < 0 || offset > (HOUR_END - HOUR_START) * 60) return null;
+  const top = (offset / 60) * HOUR_HEIGHT;
+  return (
+    <div
+      className="absolute left-0 right-0 z-10 pointer-events-none"
+      style={{ top }}
+    >
+      <div className="h-[2px] bg-red-500" />
+      <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-red-500" />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────
 export default function SalasReuniao() {
@@ -728,73 +908,13 @@ export default function SalasReuniao() {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-7 divide-x divide-slate-100 overflow-auto">
-            {diasSemana.map((dia) => {
-              const key = format(dia, "yyyy-MM-dd");
-              const lista = reservasPorDia.get(key) || [];
-              const ehHoje = isSameDay(dia, new Date());
-              return (
-                <div key={key} className="flex flex-col min-w-[140px]">
-                  <div
-                    className={`px-3 py-2 border-b sticky top-0 bg-white z-10 ${
-                      ehHoje ? "text-blue-700 font-black" : "text-slate-500 font-bold"
-                    }`}
-                  >
-                    <div className="text-[10px] uppercase tracking-wide">
-                      {format(dia, "EEEE", { locale: ptBR })}
-                    </div>
-                    <div className="text-sm">{format(dia, "dd/MM")}</div>
-                  </div>
-                  <div
-                    className="flex-1 p-2 space-y-2 hover:bg-blue-50/30 transition-colors cursor-pointer"
-                    onClick={(e) => {
-                      if (e.target === e.currentTarget) abrirNova(dia);
-                    }}
-                  >
-                    {lista.length === 0 && (
-                      <div className="text-[11px] text-slate-300 italic text-center pt-2 select-none">
-                        Livre
-                      </div>
-                    )}
-                    {lista.map((it) => {
-                      const isReuniao = it.kind === "reuniao";
-                      return (
-                        <div
-                          key={it.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isReuniao) {
-                              navigate(`/central-reunioes?editId=${it.raw.id}`);
-                            } else {
-                              setReservaInfo(it.raw);
-                            }
-                          }}
-                          className={`rounded-lg border border-l-4 shadow-sm p-2 hover:shadow-md transition cursor-pointer ${
-                            isReuniao
-                              ? "bg-violet-50/60 border border-dashed border-violet-300"
-                              : "bg-white"
-                          }`}
-                          style={{ borderLeftColor: it.cor }}
-                          title={isReuniao ? "Reunião da Agenda Tática (clique pra editar)" : "Reserva manual (clique pra editar)"}
-                        >
-                          <div className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
-                            {extractTime(it.inicio)} - {extractTime(it.fim)}
-                            {isReuniao && (
-                              <span className="ml-auto text-[9px] uppercase font-black tracking-wide text-violet-700 bg-violet-100 px-1 rounded">
-                                Agenda
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs font-bold text-slate-800 truncate">{it.titulo}</div>
-                          <div className="text-[10px] text-slate-500 truncate">{it.responsavel}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <TimelineSemanal
+            diasSemana={diasSemana}
+            reservasPorDia={reservasPorDia}
+            onItemClick={(it) => setReservaInfo(it)}
+            onSlotClick={(dia) => abrirNova(dia)}
+            salaCor={salaAtual?.cor}
+          />
         </div>
 
         {loading && (
@@ -824,20 +944,21 @@ export default function SalasReuniao() {
 
       <PopupInfoReserva
         aberto={!!reservaInfo}
-        reserva={reservaInfo}
+        item={reservaInfo}
         salaCor={salaAtual?.cor}
         onClose={() => setReservaInfo(null)}
         onEditar={() => {
-          abrirEdit(reservaInfo);
+          if (reservaInfo?.raw) abrirEdit(reservaInfo.raw);
           setReservaInfo(null);
         }}
         onExcluir={async () => {
-          if (!reservaInfo?.id) return;
+          const raw = reservaInfo?.raw;
+          if (!raw?.id) return;
           if (!confirm("Excluir essa reserva?")) return;
           const { error } = await supabase
             .from("reservas_salas")
             .delete()
-            .eq("id", reservaInfo.id);
+            .eq("id", raw.id);
           if (error) return alert("Erro: " + error.message);
           setReservaInfo(null);
           carregar();
