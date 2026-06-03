@@ -35,16 +35,39 @@ import { parseSafeDate } from "../services/agendaDates";
 import { sortUniqueDates } from "../services/agendaDates";
 import DetalhesReuniao from "../components/tatico/DetalhesReuniao";
 import ModalSincronizarGoogle from "../components/tatico/ModalSincronizarGoogle";
-import { deleteCalendarEventByReuniaoId } from "../utils/googleCalendar";
+import {
+  deleteCalendarEventByReuniaoId,
+  isGoogleConnected,
+  upsertCalendarEvent,
+} from "../utils/googleCalendar";
+
+// Sincroniza uma reunião com o Google Agenda em background.
+// Silencioso quando o usuário ainda não conectou (não atrapalha o fluxo).
+function autoSyncReuniao(reuniao, tipo) {
+  if (!reuniao?.id) return;
+  if (!isGoogleConnected()) return;
+  upsertCalendarEvent(reuniao, tipo?.nome || "", tipo?.cor || reuniao?.cor || null).catch(
+    () => {}
+  );
+}
 
 const SENHA_EXCLUSAO = "KM2026";
 
-// ✅ 1. FUNÇÃO "LITERAL" PARA EXTRAIR HORA (IGNORA FUSO)
+// ✅ 1. EXTRAIR HORA — converte para hora local quando há offset/Z, senão literal
 function extractTime(dateString) {
   if (!dateString) return "";
   const str = String(dateString);
 
-  // Se for ISO completa (tem T), pega o trecho da hora
+  // ISO com fuso explícito (Z ou +/-HH:MM) → converte pra hora local do navegador
+  if (str.includes("T") && /(Z|[+\-]\d{2}:?\d{2})$/i.test(str)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  }
+
+  // Se for ISO sem fuso (wall-clock), pega o trecho da hora literal
   if (str.includes("T")) {
     return str.split("T")[1].substring(0, 5);
   }
@@ -402,8 +425,10 @@ export default function CentralReunioes() {
           timeValue: formData.hora_inicio,
         });
         if (error) throw error;
+
+        // Auto-sync Google: atualiza evento da reunião editada
+        autoSyncReuniao({ ...editingReuniao, ...dados, id: editingReuniao.id }, tipo);
       } else {
-        // ✅ precisa retornar data com id (select().single()) no agendaService
         const { data, error } = await salvarReuniao(dados, {
           mode: agendaMode,
           selectedDates: datasSelecionadas,
@@ -420,6 +445,8 @@ export default function CentralReunioes() {
               item.id,
               formData.participantes_manuais
             );
+            // Auto-sync Google: cria evento para cada reunião gerada
+            autoSyncReuniao(item, tipo);
           }
         }
       }
@@ -532,6 +559,18 @@ export default function CentralReunioes() {
         })
         .eq("id", draggingReuniao.id);
       if (error) throw error;
+
+      // Auto-sync Google: reagenda o evento
+      autoSyncReuniao(
+        {
+          ...draggingReuniao,
+          data_hora: novaDataHora,
+          horario_inicio: novaDataHora,
+          horario_fim: novoFim,
+        },
+        getTipoById(draggingReuniao.tipo_reuniao_id) || draggingReuniao.tipos_reuniao
+      );
+
       await fetchReunioes();
     } catch (err) {
       console.error(err);
@@ -658,25 +697,39 @@ export default function CentralReunioes() {
               </button>
             </div>
             <button
-              onClick={() => setShowGoogleSync(true)}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 text-slate-700 px-3 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm active:scale-95 transition-all"
-              title="Sincronizar com Google Agenda"
-            >
-              <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-                <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
-                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/>
-                <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.6 2.4-7.2 2.4-5.3 0-9.7-3.4-11.3-8l-6.5 5c3.3 6.4 10 10 17.8 10z"/>
-                <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2C40.9 35.6 44 30.3 44 24c0-1.3-.1-2.4-.4-3.5z"/>
-              </svg>
-              <span className="hidden md:inline">Google Agenda</span>
-            </button>
-            <button
               onClick={() => onDateClick(new Date())}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-md active:scale-95 transition-all"
             >
               <Plus size={18} /> Nova
             </button>
           </div>
+        </div>
+
+        {/* Caixinha de sincronização com Google Agenda */}
+        <div className="mb-4 px-4 py-3 rounded-xl border border-blue-100 bg-blue-50/60 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true" className="flex-none">
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/>
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.6 2.4-7.2 2.4-5.3 0-9.7-3.4-11.3-8l-6.5 5c3.3 6.4 10 10 17.8 10z"/>
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2C40.9 35.6 44 30.3 44 24c0-1.3-.1-2.4-.4-3.5z"/>
+            </svg>
+            <div className="min-w-0">
+              <div className="text-xs font-black uppercase tracking-wide text-blue-800">
+                Sincronize com sua Agenda Google
+              </div>
+              <div className="text-[11px] text-blue-700/80 font-semibold">
+                Conecte uma vez e as reuniões criadas, editadas ou excluídas vão para sua agenda automaticamente.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowGoogleSync(true)}
+            className="bg-white border border-blue-200 hover:border-blue-400 hover:bg-white text-blue-700 px-3 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm active:scale-95 transition-all flex-none"
+            title="Sincronizar com Google Agenda"
+          >
+            <span className="text-xs">Conectar / Sincronizar</span>
+          </button>
         </div>
 
         {view === "week" && (
@@ -779,7 +832,13 @@ export default function CentralReunioes() {
                     {format(parseISO(day), "dd 'de' MMMM", { locale: ptBR })}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {meetings.map((m) => {
+                    {[...meetings]
+                      .sort((a, b) => {
+                        const ha = extractTime(a.horario_inicio) || extractTime(a.data_hora) || "";
+                        const hb = extractTime(b.horario_inicio) || extractTime(b.data_hora) || "";
+                        return ha.localeCompare(hb);
+                      })
+                      .map((m) => {
                       const badge = statusBadge(m.status);
                       const timeRange = formatTimeRange(m);
                       return (
