@@ -53,26 +53,25 @@ function autoSyncReuniao(reuniao, tipo) {
 
 const SENHA_EXCLUSAO = "KM2026";
 
-// ✅ 1. EXTRAIR HORA — converte para hora local quando há offset/Z, senão literal
+// ✅ 1. EXTRAIR HORA — wall-clock literal (ignora fuso). Os campos são
+// sempre salvos como hora local pelo app (formulário usa HH:mm direto e
+// nowIso() em RecordingContext grava local sem Z).
 function extractTime(dateString) {
   if (!dateString) return "";
   const str = String(dateString);
 
-  // ISO com fuso explícito (Z ou +/-HH:MM) → converte pra hora local do navegador
-  if (str.includes("T") && /(Z|[+\-]\d{2}:?\d{2})$/i.test(str)) {
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) {
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-  }
-
-  // Se for ISO sem fuso (wall-clock), pega o trecho da hora literal
+  // ISO completa com T
   if (str.includes("T")) {
     return str.split("T")[1].substring(0, 5);
   }
 
-  // Se já for hora simples (09:00:00)
+  // Postgres timestamptz vem como "2026-09-21 08:00:00+00" (espaço)
+  if (str.includes(" ")) {
+    const after = str.split(" ")[1] || "";
+    return after.substring(0, 5);
+  }
+
+  // Hora simples (09:00:00)
   if (str.includes(":")) {
     return str.substring(0, 5);
   }
