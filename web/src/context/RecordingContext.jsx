@@ -31,7 +31,13 @@ const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 const WORKFLOW_FILE = "processar_video.yml";
 
 function nowIso() {
-  return new Date().toISOString();
+  // Wall-clock local sem offset — consistente com o que o resto do app exibe
+  // (extractTime literal) e com horario_inicio/data_hora vindos do formulário.
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 function safeFilePart(n) {
   return String(n).padStart(6, "0");

@@ -63,10 +63,20 @@ function parseDataLocal(s) {
 function extractTime(value) {
   if (!value) return "";
   const s = String(value);
+
+  // ISO com fuso explícito (Z ou +/-HH:MM) → converte pra hora local
+  if (s.includes("T") && /(Z|[+\-]\d{2}:?\d{2})$/i.test(s)) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  }
+
   let core = s;
   if (core.includes("T")) core = core.split("T")[1] || "";
   else if (core.includes(" ")) core = core.split(" ").pop() || "";
-  // remove zona/offset
+  // remove zona/offset residual (wall-clock)
   core = core.replace(/Z$/i, "").split(/[+\-]/)[0].trim();
   if (!core.includes(":")) return "";
   const segs = core.split(":");

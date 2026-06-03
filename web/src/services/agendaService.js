@@ -103,7 +103,7 @@ export const salvarReuniao = async (dados, regraRecorrencia) => {
   );
 
   if (modo !== "multipla" && modo !== "multiple" && datasSelecionadas.length <= 1) {
-    return await supabase.from("reunioes").insert([basePayload]);
+    return await supabase.from("reunioes").insert([basePayload]).select();
   }
 
   const datas =
@@ -120,7 +120,7 @@ export const salvarReuniao = async (dados, regraRecorrencia) => {
     data_hora: buildDateTimeValue(dateKey, horaBase),
   }));
 
-  return await supabase.from("reunioes").insert(payloadSerie);
+  return await supabase.from("reunioes").insert(payloadSerie).select();
 };
 
 export const atualizarReuniao = async (id, novosDados, aplicarEmSerie = false) => {
