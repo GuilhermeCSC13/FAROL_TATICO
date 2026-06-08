@@ -115,6 +115,7 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
 
       let reunioesSincronizadas = 0;
       let reunioesFalhas = 0;
+      let erroSincronizacao = "";
       if (ids.length) {
         const rows = ids.map((tipoId) => ({
           usuario_id: usuarioId,
@@ -139,13 +140,14 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
           const resultado = await sincronizarLoteReunioesGoogle(idsParaSync);
           reunioesSincronizadas = resultado.synced;
           reunioesFalhas = resultado.failed;
+          erroSincronizacao = resultado.firstError || "";
         }
       }
 
       setMensagem({
         tipo: "ok",
         texto: ids.length
-          ? `Assinatura salva. ${reunioesSincronizadas} reunião(ões) futura(s) enviada(s) para ${emailLimpo}.${reunioesFalhas ? ` ${reunioesFalhas} falharam e precisam tentar de novo.` : ""} Próximas mudanças também chegam por convite.`
+          ? `Assinatura salva. ${reunioesSincronizadas} reunião(ões) futura(s) enviada(s) para ${emailLimpo}.${reunioesFalhas ? ` ${reunioesFalhas} falharam: ${erroSincronizacao || "tente de novo em instantes"}.` : ""} Próximas mudanças também chegam por convite.`
           : "Você se desinscreveu de todos os tipos.",
       });
     } catch (e) {

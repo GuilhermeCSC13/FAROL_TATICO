@@ -57,15 +57,15 @@ async function buildReuniaoPayload(reuniaoId) {
 }
 
 export async function sincronizarReuniaoGoogle(reuniaoId) {
-  if (!reuniaoId) return false;
+  if (!reuniaoId) return { ok: false, error: "reuniaoId ausente" };
   try {
     const payload = await buildReuniaoPayload(reuniaoId);
-    if (!payload) return false;
+    if (!payload) return { ok: false, error: "Reunião não encontrada" };
 
     const status = String(payload.reuniao.status || "").toLowerCase();
     if (status.includes("cancel")) {
       await excluirReuniaoGoogle(reuniaoId, payload.reuniao.google_event_id);
-      return true;
+      return { ok: true };
     }
 
     const { data, error } = await supabase.functions.invoke("google-calendar", {
@@ -73,7 +73,11 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
     });
     if (error) {
       console.warn("[googleCalendarSync] upsert falhou:", error.message || error);
-      return false;
+      return { ok: false, error: error.message || String(error) };
+    }
+    if (data?.error) {
+      console.warn("[googleCalendarSync] upsert falhou:", data.error);
+      return { ok: false, error: data.error };
     }
     if (data?.eventId && data.eventId !== payload.reuniao.google_event_id) {
       await supabase
@@ -81,10 +85,10 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
         .update({ google_event_id: data.eventId })
         .eq("id", reuniaoId);
     }
-    return true;
+    return { ok: true };
   } catch (e) {
     console.warn("[googleCalendarSync] erro inesperado:", e?.message || e);
-    return false;
+    return { ok: false, error: e?.message || String(e) };
   }
 }
 
@@ -103,11 +107,15 @@ export async function excluirReuniaoGoogle(reuniaoId, googleEventId = null) {
 export async function sincronizarLoteReunioesGoogle(ids = []) {
   let synced = 0;
   let failed = 0;
+  let firstError = "";
   for (const id of ids) {
     // eslint-disable-next-line no-await-in-loop
-    const ok = await sincronizarReuniaoGoogle(id);
-    if (ok) synced += 1;
-    else failed += 1;
+    const resultado = await sincronizarReuniaoGoogle(id);
+    if (resultado.ok) synced += 1;
+    else {
+      failed += 1;
+      if (!firstError) firstError = resultado.error || "Erro desconhecido";
+    }
   }
-  return { total: ids.length, synced, failed };
+  return { total: ids.length, synced, failed, firstError };
 }
