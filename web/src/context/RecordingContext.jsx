@@ -841,6 +841,31 @@ export function RecordingProvider({ children }) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isRecording]);
 
+  // Avisa o host (Inove) que estamos gravando, pra suspender o logout por
+  // inatividade enquanto a sessão estiver ativa. Heartbeat a cada 60s; o
+  // host expira sozinho se parar de receber.
+  useEffect(() => {
+    const post = (active) => {
+      try {
+        window.parent?.postMessage({ type: "farol:recording", active }, "*");
+      } catch {
+        // ignore
+      }
+    };
+
+    if (!isRecording) {
+      post(false);
+      return undefined;
+    }
+
+    post(true);
+    const t = setInterval(() => post(true), 60 * 1000);
+    return () => {
+      clearInterval(t);
+      post(false);
+    };
+  }, [isRecording]);
+
   const value = useMemo(
     () => ({
       isRecording,
