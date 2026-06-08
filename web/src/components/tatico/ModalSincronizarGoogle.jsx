@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Check, AlertCircle, Mail } from "lucide-react";
+import { X, Check, AlertCircle, Mail, Loader2 } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 import { sincronizarLoteReunioesGoogle } from "../../services/googleCalendarSync";
 
@@ -11,6 +11,14 @@ function GoogleLogo({ size = 18 }) {
       <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.6 2.4-7.2 2.4-5.3 0-9.7-3.4-11.3-8l-6.5 5c3.3 6.4 10 10 17.8 10z" />
       <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2C40.9 35.6 44 30.3 44 24c0-1.3-.1-2.4-.4-3.5z" />
     </svg>
+  );
+}
+
+function InoveMark() {
+  return (
+    <div className="h-9 px-3 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-sm">
+      <span className="text-[11px] font-black tracking-[0.18em]">INOVE</span>
+    </div>
   );
 }
 
@@ -161,10 +169,16 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <GoogleLogo size={22} />
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                <GoogleLogo size={22} />
+              </div>
+              <div className="h-px w-5 bg-slate-300" />
+              <InoveMark />
+            </div>
             <div>
               <div className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
                 Integração
@@ -176,6 +190,7 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
           </div>
           <button
             onClick={onClose}
+            disabled={salvando}
             className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500"
           >
             <X size={18} />
@@ -281,7 +296,8 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200"
+            disabled={salvando}
+            className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
           >
             Fechar
           </button>
@@ -289,11 +305,35 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
             type="button"
             onClick={salvar}
             disabled={salvando}
-            className="px-4 py-2 rounded-xl text-sm font-black bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-xl text-sm font-black bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-80 inline-flex items-center gap-2"
           >
-            {salvando ? "Salvando…" : "Salvar"}
+            {salvando && <Loader2 size={15} className="animate-spin" />}
+            {salvando ? "Sincronizando..." : "Salvar"}
           </button>
         </div>
+
+        {salvando && (
+          <div className="absolute inset-0 z-10 bg-white/90 backdrop-blur-sm flex items-center justify-center px-6">
+            <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl p-5 text-center">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="h-12 w-12 rounded-2xl border border-slate-200 flex items-center justify-center shadow-sm">
+                  <GoogleLogo size={28} />
+                </div>
+                <Loader2 size={20} className="animate-spin text-emerald-600" />
+                <InoveMark />
+              </div>
+              <div className="text-sm font-black text-slate-800">
+                Sincronizando agenda
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Criando eventos no Google Agenda e vinculando ao Farol.
+              </div>
+              <div className="mt-4 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full w-1/2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
