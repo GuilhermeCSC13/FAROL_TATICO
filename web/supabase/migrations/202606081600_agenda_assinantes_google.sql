@@ -24,3 +24,8 @@ create index if not exists idx_agenda_assinantes_usuario
 
 comment on table public.agenda_assinantes_google is
   'Inscricoes por usuario para receber convite Google em reunioes de certos tipos.';
+
+-- Farol nao usa Supabase Auth (login via usuarios_aprovadores), entao a
+-- RLS padrao bloquearia inserts do anon. Desliga aqui pra alinhar com
+-- as outras tabelas da app.
+alter table public.agenda_assinantes_google disable row level security;

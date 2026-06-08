@@ -57,15 +57,15 @@ async function buildReuniaoPayload(reuniaoId) {
 }
 
 export async function sincronizarReuniaoGoogle(reuniaoId) {
-  if (!reuniaoId) return;
+  if (!reuniaoId) return false;
   try {
     const payload = await buildReuniaoPayload(reuniaoId);
-    if (!payload) return;
+    if (!payload) return false;
 
     const status = String(payload.reuniao.status || "").toLowerCase();
     if (status.includes("cancel")) {
       await excluirReuniaoGoogle(reuniaoId, payload.reuniao.google_event_id);
-      return;
+      return true;
     }
 
     const { data, error } = await supabase.functions.invoke("google-calendar", {
@@ -73,7 +73,7 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
     });
     if (error) {
       console.warn("[googleCalendarSync] upsert falhou:", error.message || error);
-      return;
+      return false;
     }
     if (data?.eventId && data.eventId !== payload.reuniao.google_event_id) {
       await supabase
@@ -81,8 +81,10 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
         .update({ google_event_id: data.eventId })
         .eq("id", reuniaoId);
     }
+    return true;
   } catch (e) {
     console.warn("[googleCalendarSync] erro inesperado:", e?.message || e);
+    return false;
   }
 }
 
@@ -99,8 +101,13 @@ export async function excluirReuniaoGoogle(reuniaoId, googleEventId = null) {
 
 // Sincroniza um lote (ex: ao criar serie). Tolerante a falhas.
 export async function sincronizarLoteReunioesGoogle(ids = []) {
+  let synced = 0;
+  let failed = 0;
   for (const id of ids) {
     // eslint-disable-next-line no-await-in-loop
-    await sincronizarReuniaoGoogle(id);
+    const ok = await sincronizarReuniaoGoogle(id);
+    if (ok) synced += 1;
+    else failed += 1;
   }
+  return { total: ids.length, synced, failed };
 }

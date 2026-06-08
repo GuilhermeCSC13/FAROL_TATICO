@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Check, AlertCircle, Mail } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { sincronizarLoteReunioesGoogle } from "../../services/googleCalendarSync";
 
 function GoogleLogo({ size = 18 }) {
   return (
@@ -20,6 +21,14 @@ function getUsuarioLogado() {
   } catch {
     return null;
   }
+}
+
+function agoraLocalIso() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) {
@@ -104,6 +113,8 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
         .eq("usuario_id", usuarioId);
       if (errDel) throw errDel;
 
+      let reunioesSincronizadas = 0;
+      let reunioesFalhas = 0;
       if (ids.length) {
         const rows = ids.map((tipoId) => ({
           usuario_id: usuarioId,
@@ -114,12 +125,27 @@ export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) 
           .from("agenda_assinantes_google")
           .insert(rows);
         if (errIns) throw errIns;
+
+        const { data: futuras, error: errFuturas } = await supabase
+          .from("reunioes")
+          .select("id")
+          .in("tipo_reuniao_id", ids)
+          .gte("data_hora", agoraLocalIso())
+          .order("data_hora", { ascending: true });
+        if (errFuturas) throw errFuturas;
+
+        const idsParaSync = (futuras || []).map((r) => r.id);
+        if (idsParaSync.length) {
+          const resultado = await sincronizarLoteReunioesGoogle(idsParaSync);
+          reunioesSincronizadas = resultado.synced;
+          reunioesFalhas = resultado.failed;
+        }
       }
 
       setMensagem({
         tipo: "ok",
         texto: ids.length
-          ? `Assinatura salva. Você vai receber convite em ${emailLimpo} para reuniões dos tipos selecionados.`
+          ? `Assinatura salva. ${reunioesSincronizadas} reunião(ões) futura(s) enviada(s) para ${emailLimpo}.${reunioesFalhas ? ` ${reunioesFalhas} falharam e precisam tentar de novo.` : ""} Próximas mudanças também chegam por convite.`
           : "Você se desinscreveu de todos os tipos.",
       });
     } catch (e) {
