@@ -40,6 +40,10 @@ import {
   isGoogleConnected,
   upsertCalendarEvent,
 } from "../utils/googleCalendar";
+import {
+  sincronizarReuniaoGoogle,
+  excluirReuniaoGoogle,
+} from "../services/googleCalendarSync";
 
 // Sincroniza uma reunião com o Google Agenda em background.
 // Silencioso quando o usuário ainda não conectou (não atrapalha o fluxo).
@@ -427,6 +431,7 @@ export default function CentralReunioes() {
 
         // Auto-sync Google: atualiza evento da reunião editada
         autoSyncReuniao({ ...editingReuniao, ...dados, id: editingReuniao.id }, tipo);
+        void sincronizarReuniaoGoogle(editingReuniao.id);
       } else {
         const { data, error } = await salvarReuniao(dados, {
           mode: agendaMode,
@@ -446,6 +451,7 @@ export default function CentralReunioes() {
             );
             // Auto-sync Google: cria evento para cada reunião gerada
             autoSyncReuniao(item, tipo);
+            void sincronizarReuniaoGoogle(item.id);
           }
         }
       }
@@ -505,6 +511,7 @@ export default function CentralReunioes() {
 
       // Tenta apagar do Google Agenda (silencioso se não estiver conectado)
       deleteCalendarEventByReuniaoId(deletedReuniaoId).catch(() => {});
+      void excluirReuniaoGoogle(deletedReuniaoId);
 
       alert("Reunião excluída com sucesso.");
       setShowDeleteAuth(false);
@@ -569,6 +576,7 @@ export default function CentralReunioes() {
         },
         getTipoById(draggingReuniao.tipo_reuniao_id) || draggingReuniao.tipos_reuniao
       );
+      void sincronizarReuniaoGoogle(draggingReuniao.id);
 
       await fetchReunioes();
     } catch (err) {

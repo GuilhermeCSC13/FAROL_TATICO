@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { excluirReuniaoGoogle } from "../services/googleCalendarSync";
 
 import {
   Calendar,
@@ -949,7 +950,9 @@ Estrutura obrigatória:
         setDeleting(false);
         return;
       }
-      await supabase.from("reunioes").delete().eq("id", selectedAta.id);
+      const ataId = selectedAta.id;
+      await supabase.from("reunioes").delete().eq("id", ataId);
+      void excluirReuniaoGoogle(ataId, selectedAta.google_event_id);
       alert("Excluída.");
       window.location.reload();
     } catch (e) {

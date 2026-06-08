@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { format } from "date-fns";
 import AgendaDatePlanner from "../components/tatico/AgendaDatePlanner";
 import { atualizarReuniao } from "../services/agendaService";
+import { sincronizarReuniaoGoogle } from "../services/googleCalendarSync";
 import { extractTimeValue, parseSafeDate, sortUniqueDates } from "../services/agendaDates";
 import { 
   ChevronLeft, ChevronRight, Calendar as CalIcon, 
@@ -142,6 +143,7 @@ const ReunioesCalendario = () => {
     );
 
     if (!error) {
+      void sincronizarReuniaoGoogle(selectedEvent.id);
       setModalOpen(false);
       await fetchReunioesPeriodo();
     } else {

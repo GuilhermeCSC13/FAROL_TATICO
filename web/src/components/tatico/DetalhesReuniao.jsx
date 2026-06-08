@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { supabase, supabaseInove } from "../../supabaseClient";
+import { sincronizarReuniaoGoogle } from "../../services/googleCalendarSync";
 
 // Helper robusto para extrair HH:mm
 function extractTime(dateString) {
@@ -245,6 +246,7 @@ export default function DetalhesReuniao({
 
         if (error) throw error;
         setParticipantesManuais((prev) => [...prev, data]);
+        void sincronizarReuniaoGoogle(editingReuniao.id);
       } else {
         const tempId = `temp-${Date.now()}`;
         const novo = { ...novoParticipante, id: tempId, is_temp: true };
@@ -269,6 +271,7 @@ export default function DetalhesReuniao({
           .delete()
           .eq("id", id);
         if (error) throw error;
+        void sincronizarReuniaoGoogle(editingReuniao.id);
       }
 
       const novaLista = participantesManuais.filter((p) => p.id !== id);
