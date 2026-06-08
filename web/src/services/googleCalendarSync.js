@@ -4,6 +4,31 @@
 
 import { supabase } from "../supabaseClient";
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+async function invokeGoogleCalendar(body) {
+  const response = await fetch(`${supabaseUrl}/functions/v1/google-calendar`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    return {
+      data,
+      error: data?.error || `Erro ${response.status} ao chamar google-calendar`,
+    };
+  }
+  return { data, error: null };
+}
+
 async function buildReuniaoPayload(reuniaoId) {
   const { data: reuniao, error } = await supabase
     .from("reunioes")
@@ -68,9 +93,7 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
       return { ok: true };
     }
 
-    const { data, error } = await supabase.functions.invoke("google-calendar", {
-      body: { action: "upsert", ...payload },
-    });
+    const { data, error } = await invokeGoogleCalendar({ action: "upsert", ...payload });
     if (error) {
       console.warn("[googleCalendarSync] upsert falhou:", error.message || error);
       return { ok: false, error: error.message || String(error) };
@@ -95,9 +118,7 @@ export async function sincronizarReuniaoGoogle(reuniaoId) {
 export async function excluirReuniaoGoogle(reuniaoId, googleEventId = null) {
   if (!reuniaoId && !googleEventId) return;
   try {
-    await supabase.functions.invoke("google-calendar", {
-      body: { action: "delete", reuniaoId, googleEventId },
-    });
+    await invokeGoogleCalendar({ action: "delete", reuniaoId, googleEventId });
   } catch (e) {
     console.warn("[googleCalendarSync] delete falhou:", e?.message || e);
   }
