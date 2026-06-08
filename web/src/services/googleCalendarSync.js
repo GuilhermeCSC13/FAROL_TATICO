@@ -14,7 +14,12 @@ async function buildReuniaoPayload(reuniaoId) {
     .maybeSingle();
   if (error || !reuniao) return null;
 
-  const [{ data: tipo }, { data: area }, { data: participantes }] = await Promise.all([
+  const [
+    { data: tipo },
+    { data: area },
+    { data: participantes },
+    { data: assinantes },
+  ] = await Promise.all([
     reuniao.tipo_reuniao_id
       ? supabase.from("tipos_reuniao").select("nome").eq("id", reuniao.tipo_reuniao_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -22,11 +27,24 @@ async function buildReuniaoPayload(reuniaoId) {
       ? supabase.from("areas").select("nome").eq("id", reuniao.area_id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from("participantes_reuniao").select("nome, email").eq("reuniao_id", reuniaoId),
+    reuniao.tipo_reuniao_id
+      ? supabase
+          .from("agenda_assinantes_google")
+          .select("google_email")
+          .eq("tipo_reuniao_id", reuniao.tipo_reuniao_id)
+      : Promise.resolve({ data: [] }),
   ]);
 
-  const emails = (participantes || [])
-    .map((p) => String(p?.email || "").trim())
-    .filter((e) => e && e.includes("@"));
+  const emailsSet = new Set();
+  (participantes || []).forEach((p) => {
+    const e = String(p?.email || "").trim().toLowerCase();
+    if (e && e.includes("@")) emailsSet.add(e);
+  });
+  (assinantes || []).forEach((a) => {
+    const e = String(a?.google_email || "").trim().toLowerCase();
+    if (e && e.includes("@")) emailsSet.add(e);
+  });
+  const emails = Array.from(emailsSet);
 
   return {
     reuniao: {

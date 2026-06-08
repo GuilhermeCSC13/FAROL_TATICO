@@ -1,21 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, RefreshCw, LogOut, Check, AlertCircle, HelpCircle, Shield } from "lucide-react";
-import {
-  ensureGoogleToken,
-  clearGoogleToken,
-  getStoredGoogleEmail,
-  isGoogleConnected,
-  syncReunioesToGoogle,
-} from "../../utils/googleCalendar";
+import { X, Check, AlertCircle, Mail } from "lucide-react";
+import { supabase } from "../../supabaseClient";
 
-const PERIODOS = [
-  { id: "30", label: "Próximos 30 dias", days: 30 },
-  { id: "60", label: "Próximos 60 dias", days: 60 },
-  { id: "90", label: "Próximos 90 dias", days: 90 },
-  { id: "365", label: "Próximos 12 meses", days: 365 },
-];
-
-// Logo Google em SVG inline
 function GoogleLogo({ size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
@@ -27,124 +13,127 @@ function GoogleLogo({ size = 18 }) {
   );
 }
 
-export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [], tipos = [] }) {
-  const [conectado, setConectado] = useState(false);
-  const [email, setEmail] = useState(null);
-  const [conectando, setConectando] = useState(false);
-  const [tiposSelecionados, setTiposSelecionados] = useState({});
-  const [periodoId, setPeriodoId] = useState("30");
-  const [sincronizando, setSincronizando] = useState(false);
-  const [progresso, setProgresso] = useState({ done: 0, total: 0 });
-  const [resultado, setResultado] = useState(null);
-  const [showAjuda, setShowAjuda] = useState(false);
+function getUsuarioLogado() {
+  try {
+    const raw = localStorage.getItem("usuario_externo");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function ModalSincronizarGoogle({ aberto, onClose, tipos = [] }) {
+  const usuario = useMemo(() => getUsuarioLogado(), [aberto]);
+  const usuarioId = usuario?.id;
+
+  const [email, setEmail] = useState("");
+  const [tiposMarcados, setTiposMarcados] = useState({});
+  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [mensagem, setMensagem] = useState(null);
 
   useEffect(() => {
-    if (!aberto) return;
-    setConectado(isGoogleConnected());
-    setEmail(getStoredGoogleEmail());
-    setResultado(null);
-    setProgresso({ done: 0, total: 0 });
-  }, [aberto]);
+    if (!aberto || !usuarioId) return;
+    let cancel = false;
+    setCarregando(true);
+    setMensagem(null);
+    (async () => {
+      const { data, error } = await supabase
+        .from("agenda_assinantes_google")
+        .select("tipo_reuniao_id, google_email")
+        .eq("usuario_id", usuarioId);
+      if (cancel) return;
+      if (!error && data?.length) {
+        setEmail(data[0].google_email || "");
+        const marcados = {};
+        data.forEach((r) => {
+          marcados[String(r.tipo_reuniao_id)] = true;
+        });
+        setTiposMarcados(marcados);
+      } else if (!error) {
+        setEmail(usuario?.email || "");
+        setTiposMarcados({});
+      }
+      setCarregando(false);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [aberto, usuarioId, usuario?.email]);
 
-  // Contadores por tipo (no período escolhido)
-  const periodo = PERIODOS.find((p) => p.id === periodoId) || PERIODOS[0];
-  const limite = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + periodo.days);
-    return d.getTime();
-  }, [periodo.days]);
+  const tiposOrdenados = useMemo(
+    () =>
+      [...(tipos || [])].sort((a, b) =>
+        String(a?.nome || "").localeCompare(String(b?.nome || ""), "pt-BR")
+      ),
+    [tipos]
+  );
 
-  const reunioesNoPeriodo = useMemo(() => {
-    const agora = Date.now();
-    return (reunioes || []).filter((r) => {
-      const t = new Date(r.horario_inicio || r.data_hora).getTime();
-      if (!t || Number.isNaN(t)) return false;
-      return t >= agora && t <= limite && String(r.status || "").toLowerCase() !== "cancelada";
-    });
-  }, [reunioes, limite]);
+  const toggle = (id) =>
+    setTiposMarcados((cur) => ({ ...cur, [String(id)]: !cur[String(id)] }));
 
-  const contagemPorTipo = useMemo(() => {
-    const m = new Map();
-    reunioesNoPeriodo.forEach((r) => {
-      const tid = String(r.tipo_reuniao_id || "");
-      m.set(tid, (m.get(tid) || 0) + 1);
-    });
-    return m;
-  }, [reunioesNoPeriodo]);
-
-  const tiposComReunioes = useMemo(() => {
-    return (tipos || [])
-      .map((t) => ({ ...t, qtd: contagemPorTipo.get(String(t.id)) || 0 }))
-      .sort((a, b) => b.qtd - a.qtd || (a.nome || "").localeCompare(b.nome || "", "pt-BR"));
-  }, [tipos, contagemPorTipo]);
-
-  const totalSelecionado = useMemo(() => {
-    return reunioesNoPeriodo.filter((r) => tiposSelecionados[String(r.tipo_reuniao_id)]).length;
-  }, [reunioesNoPeriodo, tiposSelecionados]);
-
-  const tiposById = useMemo(() => {
-    const o = {};
-    (tipos || []).forEach((t) => (o[t.id] = t));
-    return o;
-  }, [tipos]);
-
-  const handleConectar = async () => {
-    setConectando(true);
-    try {
-      const token = await ensureGoogleToken({ forcePrompt: true });
-      setConectado(true);
-      setEmail(token.email);
-    } catch (e) {
-      alert("Falha ao conectar com o Google: " + (e.message || e));
-    } finally {
-      setConectando(false);
-    }
-  };
-
-  const handleTrocarConta = () => {
-    clearGoogleToken();
-    setConectado(false);
-    setEmail(null);
-  };
-
-  const handleToggleTipo = (id) => {
-    setTiposSelecionados((s) => ({ ...s, [String(id)]: !s[String(id)] }));
-  };
-
-  const handleSelecionarTodos = () => {
+  const marcarTodos = () => {
     const next = {};
-    tiposComReunioes.forEach((t) => {
-      if (t.qtd > 0) next[String(t.id)] = true;
+    tiposOrdenados.forEach((t) => {
+      next[String(t.id)] = true;
     });
-    setTiposSelecionados(next);
+    setTiposMarcados(next);
   };
 
-  const handleSincronizar = async () => {
-    const lista = reunioesNoPeriodo.filter((r) => tiposSelecionados[String(r.tipo_reuniao_id)]);
-    if (!lista.length) {
-      alert("Selecione pelo menos um tipo de reunião com eventos no período.");
+  const desmarcarTodos = () => setTiposMarcados({});
+
+  const salvar = async () => {
+    setMensagem(null);
+    if (!usuarioId) {
+      setMensagem({ tipo: "erro", texto: "Usuário não identificado. Faça login de novo." });
       return;
     }
-    setSincronizando(true);
-    setProgresso({ done: 0, total: lista.length });
-    setResultado(null);
+    const emailLimpo = String(email || "").trim().toLowerCase();
+    if (!emailLimpo.includes("@")) {
+      setMensagem({ tipo: "erro", texto: "Informe um email Google válido." });
+      return;
+    }
+    const ids = Object.keys(tiposMarcados).filter((k) => tiposMarcados[k]);
+
+    setSalvando(true);
     try {
-      const res = await syncReunioesToGoogle(lista, tiposById, (p) => setProgresso(p));
-      setResultado(res);
+      // limpa assinaturas que o usuário tirou
+      const { error: errDel } = await supabase
+        .from("agenda_assinantes_google")
+        .delete()
+        .eq("usuario_id", usuarioId);
+      if (errDel) throw errDel;
+
+      if (ids.length) {
+        const rows = ids.map((tipoId) => ({
+          usuario_id: usuarioId,
+          google_email: emailLimpo,
+          tipo_reuniao_id: tipoId,
+        }));
+        const { error: errIns } = await supabase
+          .from("agenda_assinantes_google")
+          .insert(rows);
+        if (errIns) throw errIns;
+      }
+
+      setMensagem({
+        tipo: "ok",
+        texto: ids.length
+          ? `Assinatura salva. Você vai receber convite em ${emailLimpo} para reuniões dos tipos selecionados.`
+          : "Você se desinscreveu de todos os tipos.",
+      });
     } catch (e) {
-      setResultado({ total: lista.length, okCount: 0, errCount: lista.length, errors: [{ error: e.message }] });
+      setMensagem({ tipo: "erro", texto: e?.message || String(e) });
     } finally {
-      setSincronizando(false);
+      setSalvando(false);
     }
   };
 
   if (!aberto) return null;
 
   return (
-    <>
     <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
-        {/* Header */}
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <GoogleLogo size={22} />
@@ -152,322 +141,132 @@ export default function ModalSincronizarGoogle({ aberto, onClose, reunioes = [],
               <div className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
                 Integração
               </div>
-              <div className="text-base font-black text-slate-800">Sincronizar com Google Agenda</div>
+              <div className="text-base font-black text-slate-800">
+                Sincronizar com Google Agenda
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+          <label className="text-[11px] uppercase font-bold text-slate-500 flex items-center gap-2 mb-1.5">
+            <Mail size={12} /> Seu email do Google
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="voce@gmail.com"
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-[11px] text-slate-500 mt-1.5">
+            Vamos enviar convite para esse email toda vez que uma reunião dos
+            tipos marcados for criada, editada ou cancelada.
+          </p>
+        </div>
+
+        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="text-sm font-extrabold text-slate-700">
+            Tipos de reunião que quero receber
+          </div>
+          <div className="flex items-center gap-2 text-xs">
             <button
-              onClick={() => setShowAjuda(true)}
-              className="px-4 py-2 rounded-xl text-sm font-black bg-blue-600 hover:bg-blue-500 text-white shadow-sm flex items-center gap-2 transition"
-              title="Como conectar"
+              type="button"
+              onClick={marcarTodos}
+              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700"
             >
-              <HelpCircle size={16} /> PASSO A PASSO
+              Marcar todos
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500">
-              <X size={18} />
+            <button
+              type="button"
+              onClick={desmarcarTodos}
+              className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700"
+            >
+              Desmarcar
             </button>
           </div>
         </div>
 
-        {/* Conta conectada / desconectada */}
-        <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3 text-sm">
-          {conectado ? (
-            <>
-              <div className="flex items-center gap-2 min-w-0">
-                <Check size={16} className="text-emerald-600 flex-none" />
-                <span className="text-slate-600">Conectado como</span>
-                <span className="font-bold text-slate-800 truncate">{email || "Conta Google"}</span>
-              </div>
-              <button
-                onClick={handleTrocarConta}
-                className="text-xs font-bold text-slate-500 hover:text-red-600 flex items-center gap-1"
-              >
-                <LogOut size={12} /> Trocar conta
-              </button>
-            </>
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
+          {carregando ? (
+            <div className="text-sm text-slate-500 text-center py-6">Carregando…</div>
+          ) : tiposOrdenados.length === 0 ? (
+            <div className="text-sm text-slate-500 text-center py-6">
+              Nenhum tipo de reunião cadastrado ainda.
+            </div>
           ) : (
-            <>
-              <div className="text-slate-600">
-                Conecte sua conta Google para sincronizar.{" "}
+            tiposOrdenados.map((t) => {
+              const marcado = !!tiposMarcados[String(t.id)];
+              return (
                 <button
-                  onClick={() => setShowAjuda(true)}
-                  className="text-blue-600 font-bold underline-offset-2 hover:underline"
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggle(t.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border text-left transition ${
+                    marcado
+                      ? "bg-emerald-50 border-emerald-300"
+                      : "bg-white border-slate-200 hover:border-slate-300"
+                  }`}
                 >
-                  Como conectar?
+                  <span
+                    className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                      marcado
+                        ? "bg-emerald-500 border-emerald-500 text-white"
+                        : "border-slate-300"
+                    }`}
+                  >
+                    {marcado && <Check size={14} />}
+                  </span>
+                  <span className="flex-1 text-sm font-bold text-slate-800">
+                    {t.nome || `Tipo ${t.id}`}
+                  </span>
                 </button>
-              </div>
-              <button
-                onClick={handleConectar}
-                disabled={conectando}
-                className="bg-white border border-slate-300 hover:border-blue-400 hover:bg-blue-50 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-2 transition disabled:opacity-60"
-              >
-                <GoogleLogo size={14} />
-                {conectando ? "Conectando..." : "Conectar Google"}
-              </button>
-            </>
+              );
+            })
           )}
         </div>
 
-        {/* Corpo */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Período */}
-          <div>
-            <label className="text-xs font-extrabold uppercase text-slate-500 block mb-1">Período</label>
-            <select
-              value={periodoId}
-              onChange={(e) => setPeriodoId(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-              disabled={sincronizando}
-            >
-              {PERIODOS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-            </select>
+        {mensagem && (
+          <div
+            className={`mx-6 mb-3 rounded-xl px-3 py-2 text-xs flex items-start gap-2 ${
+              mensagem.tipo === "ok"
+                ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+                : "bg-rose-50 border border-rose-200 text-rose-900"
+            }`}
+          >
+            {mensagem.tipo === "ok" ? (
+              <Check size={14} className="mt-0.5 flex-shrink-0" />
+            ) : (
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+            )}
+            <span>{mensagem.texto}</span>
           </div>
+        )}
 
-          {/* Tipos de reunião */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-extrabold uppercase text-slate-500">
-                Tipos de reunião para sincronizar
-              </label>
-              <button
-                type="button"
-                onClick={handleSelecionarTodos}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-700"
-                disabled={sincronizando}
-              >
-                Selecionar todos
-              </button>
-            </div>
-            <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-[280px] overflow-y-auto">
-              {tiposComReunioes.length === 0 ? (
-                <div className="p-4 text-sm text-slate-500 text-center">Nenhum tipo de reunião encontrado.</div>
-              ) : (
-                tiposComReunioes.map((t) => {
-                  const checked = !!tiposSelecionados[String(t.id)];
-                  const desabilitado = t.qtd === 0;
-                  return (
-                    <label
-                      key={t.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer ${
-                        desabilitado ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={desabilitado || sincronizando}
-                        onChange={() => handleToggleTipo(t.id)}
-                        className="w-4 h-4 accent-blue-600"
-                      />
-                      <span
-                        className="w-3 h-3 rounded-full flex-none"
-                        style={{ backgroundColor: t.cor || "#3B82F6" }}
-                      />
-                      <span className="flex-1 text-sm font-semibold text-slate-700 truncate">
-                        {t.nome}
-                      </span>
-                      <span className="text-xs text-slate-500 font-bold">
-                        {t.qtd} reuni{t.qtd === 1 ? "ão" : "ões"}
-                      </span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Progresso ou resultado */}
-          {sincronizando && (
-            <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 flex items-center gap-3">
-              <RefreshCw size={18} className="text-blue-600 animate-spin" />
-              <div className="text-sm text-blue-800 font-semibold">
-                Sincronizando {progresso.done} de {progresso.total}...
-              </div>
-            </div>
-          )}
-
-          {resultado && !sincronizando && (
-            <div
-              className={`rounded-xl border p-3 flex items-start gap-3 ${
-                resultado.errCount === 0
-                  ? "bg-emerald-50 border-emerald-200"
-                  : "bg-amber-50 border-amber-200"
-              }`}
-            >
-              {resultado.errCount === 0 ? (
-                <Check size={20} className="text-emerald-600 mt-0.5" />
-              ) : (
-                <AlertCircle size={20} className="text-amber-600 mt-0.5" />
-              )}
-              <div className="text-sm">
-                <div className="font-bold text-slate-800">
-                  {resultado.okCount} reuni{resultado.okCount === 1 ? "ão" : "ões"} sincronizada
-                  {resultado.okCount === 1 ? "" : "s"} com sucesso.
-                </div>
-                {(resultado.createdCount > 0 || resultado.updatedCount > 0) && (
-                  <div className="text-slate-600 mt-1 text-xs">
-                    {resultado.createdCount > 0 && (
-                      <>{resultado.createdCount} criada{resultado.createdCount === 1 ? "" : "s"}</>
-                    )}
-                    {resultado.createdCount > 0 && resultado.updatedCount > 0 && <> · </>}
-                    {resultado.updatedCount > 0 && (
-                      <>{resultado.updatedCount} atualizada{resultado.updatedCount === 1 ? "" : "s"}</>
-                    )}
-                  </div>
-                )}
-                {resultado.errCount > 0 && (
-                  <div className="text-amber-700 mt-1">
-                    {resultado.errCount} falha{resultado.errCount === 1 ? "" : "s"} —{" "}
-                    {resultado.errors?.[0]?.error?.slice(0, 120)}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            <b>{totalSelecionado}</b> reuni{totalSelecionado === 1 ? "ão" : "ões"} ser
-            {totalSelecionado === 1 ? "á" : "ão"} sincronizada{totalSelecionado === 1 ? "" : "s"}.
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800"
-            >
-              Fechar
-            </button>
-            <button
-              type="button"
-              onClick={handleSincronizar}
-              disabled={!conectado || sincronizando || totalSelecionado === 0}
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-black shadow-sm flex items-center gap-2"
-            >
-              <RefreshCw size={14} className={sincronizando ? "animate-spin" : ""} />
-              {sincronizando ? "Sincronizando..." : "Sincronizar agora"}
-            </button>
-          </div>
+        <div className="px-6 py-3 border-t border-slate-200 flex items-center justify-end gap-2 bg-slate-50/60">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={salvando}
+            className="px-4 py-2 rounded-xl text-sm font-black bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+          >
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
         </div>
       </div>
     </div>
-
-    {/* Popup de Passo a passo — separado, em cima de tudo */}
-    {showAjuda && (
-      <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="px-7 py-5 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center">
-                  <HelpCircle size={22} />
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-blue-700">
-                    Guia rápido
-                  </div>
-                  <div className="text-lg font-black text-slate-800">
-                    Como conectar sua conta Google
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAjuda(false)}
-                className="p-2 rounded-full hover:bg-slate-100 text-slate-500"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-7 py-5 space-y-5">
-              <ol className="space-y-4">
-                <li className="flex gap-4">
-                  <span className="flex-none w-9 h-9 rounded-full bg-blue-600 text-white font-black text-base flex items-center justify-center">1</span>
-                  <div className="text-base text-slate-700 pt-1">
-                    Clique em <b>Conectar Google</b> na barra logo abaixo do título.
-                  </div>
-                </li>
-
-                <li className="flex gap-4">
-                  <span className="flex-none w-9 h-9 rounded-full bg-blue-600 text-white font-black text-base flex items-center justify-center">2</span>
-                  <div className="text-base text-slate-700 pt-1">
-                    Vai abrir uma <b>janela do Google</b>. Escolha a conta que você usa no Google Agenda do dia a dia.
-                  </div>
-                </li>
-
-                <li className="flex gap-4">
-                  <span className="flex-none w-9 h-9 rounded-full bg-amber-500 text-white font-black text-base flex items-center justify-center">3</span>
-                  <div className="text-base text-slate-700 pt-1 flex-1">
-                    <b className="text-amber-700">
-                      Vai aparecer uma tela amarela: "O Google ainda não verificou este app".
-                    </b>{" "}
-                    Isso é normal — não foi pirateado nem tem vírus. É só porque o app ainda está em revisão oficial do Google.
-                    <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">
-                      <div className="font-black text-amber-800 mb-2 flex items-center gap-2">
-                        <Shield size={16} /> Como passar dessa tela:
-                      </div>
-                      <ol className="list-decimal pl-5 space-y-1.5 text-amber-900">
-                        <li>
-                          Clique no link <b>"Avançado"</b> (ou <b>"Show advanced"</b>) no canto inferior esquerdo.
-                        </li>
-                        <li>
-                          Embaixo do texto que aparecer, clique em <b>"Acessar Farol Tático (não seguro)"</b>.
-                        </li>
-                      </ol>
-                      <div className="mt-3 text-amber-800">
-                        ✅ Esse "não seguro" é só rótulo padrão do Google enquanto não passamos pela verificação. Seus dados continuam protegidos.
-                      </div>
-                    </div>
-                  </div>
-                </li>
-
-                <li className="flex gap-4">
-                  <span className="flex-none w-9 h-9 rounded-full bg-blue-600 text-white font-black text-base flex items-center justify-center">4</span>
-                  <div className="text-base text-slate-700 pt-1">
-                    O Google vai pedir permissão pra{" "}
-                    <b>"Ver, editar e excluir eventos da sua agenda"</b>. Clique em{" "}
-                    <b>"Continuar"</b>.
-                  </div>
-                </li>
-
-                <li className="flex gap-4">
-                  <span className="flex-none w-9 h-9 rounded-full bg-emerald-600 text-white font-black text-base flex items-center justify-center">5</span>
-                  <div className="text-base text-slate-700 pt-1">
-                    Pronto! Você volta automaticamente pro Farol com a conta conectada. Escolha o <b>período</b>, marque os <b>tipos de reunião</b> e clique em <b>Sincronizar agora</b>.
-                  </div>
-                </li>
-              </ol>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 space-y-2">
-                <div className="font-black text-slate-800 flex items-center gap-2 mb-1">
-                  <HelpCircle size={14} /> Perguntas frequentes
-                </div>
-                <div>
-                  <b>Posso desconectar depois?</b> Sim — botão <b>"Trocar conta"</b> no topo do modal, ou em myaccount.google.com → Segurança → Apps com acesso à conta.
-                </div>
-                <div>
-                  <b>O que sincroniza?</b> Apenas reuniões futuras dos tipos que você marcar. Cada evento vai com título, data/hora, ATA e cor do tipo.
-                </div>
-                <div>
-                  <b>Se eu sincronizar de novo?</b> O Farol atualiza os eventos existentes em vez de criar duplicados.
-                </div>
-              </div>
-            </div>
-
-            <div className="px-7 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-              <button
-                onClick={() => setShowAjuda(false)}
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black shadow-sm"
-              >
-                Entendi, voltar
-              </button>
-            </div>
-          </div>
-        </div>
-    )}
-    </>
   );
 }
