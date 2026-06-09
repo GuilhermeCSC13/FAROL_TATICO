@@ -1,18 +1,35 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// Wrapper compativel com a interface do @google/generative-ai mas que vai
+// pela Edge Function `gemini-proxy` no Supabase. A chave da Gemini API
+// fica como secret no Supabase (GEMINI_API_KEY), nunca chega no bundle.
 
-// 1. Tenta pegar a chave do arquivo .env
-const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+import { supabase } from "../supabaseClient";
 
-// 2. Validação de segurança para você saber se deu erro
-if (!API_KEY) {
-  console.error("❌ ERRO CRÍTICO: API Key do Google não encontrada. Verifique seu arquivo .env");
+async function callProxy(prompt, { model = "gemini-2.5-pro" } = {}) {
+  const { data, error } = await supabase.functions.invoke("gemini-proxy", {
+    body: { model, prompt },
+  });
+  if (error) {
+    throw new Error(error.message || "Falha ao chamar gemini-proxy");
+  }
+  if (!data?.ok) {
+    throw new Error(data?.error || "Resposta invalida do gemini-proxy");
+  }
+  return data.text || "";
 }
 
-// 3. Inicializa a biblioteca
-// (Usa uma string vazia como fallback para não quebrar o build se a chave faltar temporariamente)
-const genAI = new GoogleGenerativeAI(API_KEY || "");
+// Mantem a mesma assinatura usada hoje em Inicio.jsx, CentralAtas.jsx,
+// TacticalAssistant.jsx:
+//   const model = getGeminiFlash();
+//   const result = await model.generateContent(prompt);
+//   result.response.text();
+function buildModel(modelName) {
+  return {
+    generateContent: async (prompt) => {
+      const text = await callProxy(prompt, { model: modelName });
+      return { response: { text: () => text } };
+    },
+  };
+}
 
-// 4. Exporta a função que seus componentes (Inicio e Copiloto) estão chamando
-export const getGeminiFlash = () => {
-  return genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-};
+export const getGeminiFlash = () => buildModel("gemini-2.5-pro");
+export const getGeminiModel = (modelName) => buildModel(modelName);
