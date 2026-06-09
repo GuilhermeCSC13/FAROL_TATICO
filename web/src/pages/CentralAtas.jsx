@@ -256,6 +256,82 @@ function bulletizeAcoesSection(md) {
   return ensureSpacing(before.trim() + "\n\n" + out.join("\n").trim());
 }
 
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Mini-renderer de Markdown -> HTML pro PDF da ata. Cobre o que a ATA
+// gerada pela IA produz: H1/H2/H3, paragrafos, listas (- ou *), listas
+// numeradas, **bold** e *italic*. Nao usa libs novas.
+function mdToHtml(md) {
+  const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let listType = null; // 'ul' | 'ol' | null
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      out.push(`<p>${inlineMd(paragraph.join(" "))}</p>`);
+      paragraph = [];
+    }
+  };
+  const closeList = () => {
+    if (listType) {
+      out.push(`</${listType}>`);
+      listType = null;
+    }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+    let m;
+    if ((m = line.match(/^###\s+(.*)$/))) {
+      flushParagraph(); closeList();
+      out.push(`<h3>${inlineMd(m[1])}</h3>`);
+    } else if ((m = line.match(/^##\s+(.*)$/))) {
+      flushParagraph(); closeList();
+      out.push(`<h2>${inlineMd(m[1])}</h2>`);
+    } else if ((m = line.match(/^#\s+(.*)$/))) {
+      flushParagraph(); closeList();
+      out.push(`<h1>${inlineMd(m[1])}</h1>`);
+    } else if (/^---+$/.test(line)) {
+      flushParagraph(); closeList();
+      out.push(`<hr/>`);
+    } else if ((m = line.match(/^[-*]\s+(.*)$/))) {
+      flushParagraph();
+      if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; }
+      out.push(`<li>${inlineMd(m[1])}</li>`);
+    } else if ((m = line.match(/^\d+\.\s+(.*)$/))) {
+      flushParagraph();
+      if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; }
+      out.push(`<li>${inlineMd(m[1])}</li>`);
+    } else {
+      closeList();
+      paragraph.push(line);
+    }
+  }
+  flushParagraph(); closeList();
+  return out.join("\n");
+}
+
+function inlineMd(text) {
+  let t = escapeHtml(text);
+  t = t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|\s)\*(.+?)\*(?=\s|$)/g, "$1<em>$2</em>");
+  t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return t;
+}
+
 function formatAtaMarkdown(raw, { titulo, dataBR } = {}) {
   let t = cleanLeadingSalutation(raw);
 
@@ -747,60 +823,236 @@ Estrutura obrigatória:
     }
   };
 
-  // ✅ PDF
+  // ✅ PDF — render offscreen em largura fixa (independe do zoom da pagina)
+  // + assembly bloco-a-bloco pra evitar corte no meio de paragrafo/lista.
   const handleGerarPDF = async () => {
+    if (!selectedAta) return;
     try {
-      if (!ataExportRef.current) return alert("Área da ATA não encontrada para exportar.");
       setGeneratingPdf(true);
 
-      const el = ataExportRef.current;
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        imageTimeout: 10000,
-        removeContainer: true,
-      });
+      const titulo = selectedAta.titulo || "Ata da Reunião";
+      const dataBR = selectedAta.gravacao_inicio
+        ? new Date(selectedAta.gravacao_inicio).toLocaleDateString("pt-BR")
+        : selectedAta.data_hora
+          ? new Date(selectedAta.data_hora).toLocaleDateString("pt-BR")
+          : "";
+      const horaIni = selectedAta.gravacao_inicio
+        ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "--:--";
+      const horaFim = selectedAta.gravacao_fim
+        ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "--:--";
+      const duracao = selectedAta.gravacao_inicio && selectedAta.gravacao_fim
+        ? calculateRealDuration(selectedAta.gravacao_inicio, selectedAta.gravacao_fim)
+        : "";
 
-      if (!canvas) throw new Error("Falha ao gerar canvas");
-      const imgData = canvas.toDataURL("image/png", 1.0);
-      if (!imgData || imgData.length < 100) throw new Error("Imagem gerada inválida");
+      // Constroi HTML estilizado (estilo dos prints que ficaram bonitinhos)
+      const presentes = (presenca?.presentes || []).map((p) => p?.nome || "").filter(Boolean);
+      const pautaMd = formatAtaMarkdown(editedPauta || selectedAta.pauta || "", { titulo, dataBR });
+      const pautaHtml = mdToHtml(pautaMd);
 
-      const pdf = new jsPDF({
-        orientation: "p",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
+      const wrapper = document.createElement("div");
+      wrapper.id = "ata-printable";
+      wrapper.style.cssText = `
+        position: fixed; left: -10000px; top: 0; width: 794px;
+        background: #ffffff; padding: 0;
+        font-family: 'Inter','Segoe UI',Arial,sans-serif; color: #0f172a;
+      `;
+      wrapper.innerHTML = `
+        <style>
+          #ata-printable * { box-sizing: border-box; }
+          #ata-printable .doc-head {
+            border-bottom: 3px solid #1e3a8a; padding: 28px 32px 18px 32px;
+          }
+          #ata-printable .doc-eyebrow {
+            font-size: 10px; letter-spacing: 0.18em; font-weight: 800;
+            text-transform: uppercase; color: #1e3a8a; margin-bottom: 6px;
+          }
+          #ata-printable h1.doc-title {
+            font-size: 22px; font-weight: 800; color: #0f172a;
+            margin: 0 0 10px 0; line-height: 1.2;
+          }
+          #ata-printable .doc-meta {
+            display: flex; gap: 18px; flex-wrap: wrap;
+            font-size: 12px; color: #475569; margin-top: 4px;
+          }
+          #ata-printable .doc-meta b { color: #0f172a; font-weight: 700; }
+          #ata-printable .doc-dur {
+            margin-top: 6px; color: #b91c1c; font-weight: 700; font-size: 12px;
+          }
+          #ata-printable .doc-body { padding: 22px 32px 28px 32px; }
+          #ata-printable .presenca-card {
+            border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;
+            background: #f8fafc; margin-bottom: 22px;
+          }
+          #ata-printable .presenca-head {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 10px; font-weight: 800; color: #475569;
+            text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px;
+          }
+          #ata-printable .presenca-count {
+            background: #fff; padding: 3px 8px; border-radius: 6px;
+            border: 1px solid #e2e8f0; color: #0f172a; font-weight: 800;
+          }
+          #ata-printable .presenca-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+          #ata-printable .presenca-chip {
+            background: #dcfce7; color: #166534; border: 1px solid #86efac;
+            font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+          }
+          #ata-printable .pauta h1 {
+            font-size: 18px; font-weight: 800; color: #0f172a;
+            margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;
+          }
+          #ata-printable .pauta h2 {
+            font-size: 14px; font-weight: 800; color: #1d4ed8;
+            margin: 22px 0 10px 0;
+          }
+          #ata-printable .pauta h3 {
+            font-size: 12px; font-weight: 800; color: #1e293b;
+            margin: 14px 0 6px 0;
+          }
+          #ata-printable .pauta p {
+            font-size: 11.5px; color: #334155; line-height: 1.55;
+            margin: 0 0 9px 0;
+          }
+          #ata-printable .pauta ul, #ata-printable .pauta ol {
+            margin: 4px 0 12px 0; padding-left: 0; list-style: none;
+          }
+          #ata-printable .pauta li {
+            font-size: 11.5px; color: #334155; line-height: 1.55;
+            padding-left: 16px; position: relative; margin-bottom: 5px;
+          }
+          #ata-printable .pauta ul li::before {
+            content: ""; position: absolute; left: 4px; top: 9px;
+            width: 5px; height: 5px; border-radius: 50%; background: #1d4ed8;
+          }
+          #ata-printable .pauta ol { counter-reset: ata-ol; }
+          #ata-printable .pauta ol li { counter-increment: ata-ol; }
+          #ata-printable .pauta ol li::before {
+            content: counter(ata-ol) "."; position: absolute; left: 0; top: 0;
+            color: #1d4ed8; font-weight: 800; font-size: 11.5px;
+          }
+          #ata-printable .pauta strong { color: #0f172a; font-weight: 800; }
+          #ata-printable .pauta em { color: #475569; font-style: italic; }
+          #ata-printable .pauta hr {
+            border: 0; border-top: 1px solid #e2e8f0; margin: 18px 0;
+          }
+          #ata-printable .nobreak { break-inside: avoid; page-break-inside: avoid; }
+        </style>
+        <div class="doc-head nobreak">
+          <div class="doc-eyebrow">Farol Tatico • Ata Oficial</div>
+          <h1 class="doc-title">${escapeHtml(titulo)}</h1>
+          <div class="doc-meta">
+            ${dataBR ? `<span><b>Data:</b> ${dataBR}</span>` : ""}
+            <span><b>Horario:</b> ${horaIni} - ${horaFim}</span>
+            ${presentes.length ? `<span><b>Presentes:</b> ${presentes.length}</span>` : ""}
+          </div>
+          ${duracao ? `<div class="doc-dur">Duracao real: ${escapeHtml(duracao)}</div>` : ""}
+        </div>
+        <div class="doc-body">
+          ${presentes.length ? `
+            <div class="presenca-card nobreak">
+              <div class="presenca-head">
+                <span>Lista de Presenca</span>
+                <span class="presenca-count">${presentes.length}</span>
+              </div>
+              <div class="presenca-chips">
+                ${presentes.map((n) => `<span class="presenca-chip">${escapeHtml(n)}</span>`).join("")}
+              </div>
+            </div>
+          ` : ""}
+          <div class="pauta">${pautaHtml}</div>
+        </div>
+      `;
+      document.body.appendChild(wrapper);
 
-      const margin = 10;
-      const usableWidth = pageWidth - margin * 2;
-      const imgWidth = usableWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      try {
+        // Renderiza bloco a bloco pra evitar corte no meio de paragrafo
+        const head = wrapper.querySelector(".doc-head");
+        const body = wrapper.querySelector(".doc-body");
+        const presencaCard = body?.querySelector(".presenca-card");
+        const pauta = body?.querySelector(".pauta");
 
-      let y = margin;
-      let remainingHeight = imgHeight;
+        const renderEl = async (el, width = 794) => {
+          const tmp = document.createElement("div");
+          tmp.style.cssText = `position: fixed; left: -10000px; top: 0; width: ${width}px; background: #fff;`;
+          tmp.appendChild(el.cloneNode(true));
+          // copia o <style> do wrapper original
+          const style = wrapper.querySelector("style");
+          if (style) tmp.insertBefore(style.cloneNode(true), tmp.firstChild);
+          tmp.id = "ata-printable";
+          document.body.appendChild(tmp);
+          try {
+            return await html2canvas(tmp, {
+              scale: 2.5, useCORS: true, backgroundColor: "#ffffff", logging: false,
+            });
+          } finally {
+            tmp.remove();
+          }
+        };
 
-      pdf.addImage(imgData, "PNG", margin, y, imgWidth, imgHeight);
-      remainingHeight -= pageHeight - margin * 2;
+        // Lista de blocos: cabecalho + presenca + cada bloco filho de pauta
+        const blocks = [];
+        if (head) blocks.push(head);
+        if (presencaCard) blocks.push(presencaCard);
+        if (pauta) {
+          Array.from(pauta.children).forEach((child) => blocks.push(child));
+        }
 
-      while (remainingHeight > 0) {
-        pdf.addPage();
-        y = margin - (imgHeight - remainingHeight);
-        pdf.addImage(imgData, "PNG", margin, y, imgWidth, imgHeight);
-        remainingHeight -= pageHeight - margin * 2;
+        const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 12;
+        const maxW = pageW - margin * 2;
+        const maxH = pageH - margin * 2;
+
+        let cursorY = margin;
+        let isFirstPage = true;
+
+        for (const block of blocks) {
+          const canvas = await renderEl(block);
+          const imgH = (canvas.height * maxW) / canvas.width;
+
+          if (!isFirstPage && cursorY + imgH > pageH - margin) {
+            pdf.addPage();
+            cursorY = margin;
+          }
+
+          // Se o bloco unico for maior que uma pagina, paginamos ele
+          if (imgH > maxH) {
+            // imprime fatiando
+            let sliceTop = 0;
+            while (sliceTop < canvas.height) {
+              const sliceH = Math.min(canvas.height - sliceTop, (canvas.width * maxH) / maxW);
+              const sliceCanvas = document.createElement("canvas");
+              sliceCanvas.width = canvas.width;
+              sliceCanvas.height = sliceH;
+              const ctx = sliceCanvas.getContext("2d");
+              ctx.fillStyle = "#fff";
+              ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+              ctx.drawImage(canvas, 0, -sliceTop);
+              const sliceImg = sliceCanvas.toDataURL("image/jpeg", 0.92);
+              const sliceMm = (sliceH * maxW) / canvas.width;
+              if (!isFirstPage) pdf.addPage();
+              pdf.addImage(sliceImg, "JPEG", margin, margin, maxW, sliceMm);
+              sliceTop += sliceH;
+              isFirstPage = false;
+              cursorY = margin + sliceMm + 4;
+            }
+          } else {
+            const imgData = canvas.toDataURL("image/jpeg", 0.92);
+            pdf.addImage(imgData, "JPEG", margin, cursorY, maxW, imgH);
+            cursorY += imgH + 4;
+            isFirstPage = false;
+          }
+        }
+
+        const safe = (selectedAta?.titulo || "Ata").replace(/[\\/:*?"<>|]/g, " ").trim();
+        const fileName = `ATA - ${safe}${dataBR ? " - " + dataBR : ""}.pdf`;
+        pdf.save(fileName);
+      } finally {
+        wrapper.remove();
       }
-
-      const titulo = (selectedAta?.titulo || "Ata").replace(/[\\/:*?"<>|]/g, " ").trim();
-      const dataBR = selectedAta?.data_hora ? new Date(selectedAta.data_hora).toLocaleDateString("pt-BR") : "";
-      const fileName = `ATA - ${titulo}${dataBR ? " - " + dataBR : ""}.pdf`;
-
-      pdf.save(fileName);
-      alert("PDF gerado com sucesso!");
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
       alert("Erro ao gerar PDF: " + (e?.message || "Falha desconhecida"));
@@ -1236,22 +1488,43 @@ Estrutura obrigatória:
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <button onClick={handleGerarPDF} disabled={generatingPdf} className="p-2 bg-slate-100 rounded hover:bg-slate-200" title="Gerar PDF da ATA">
-                      {generatingPdf ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-                    </button>
-
-                    {isEditing && (
-                      <button onClick={handleSaveAta} className="p-2 bg-green-600 text-white rounded hover:bg-green-700" title="Salvar">
-                        <CheckCircle size={18} />
+                  <div className="flex items-center gap-2">
+                    {/* Par de acoes principal — visual iOS (pill + segmentos) */}
+                    <div className="inline-flex items-center bg-slate-100/80 backdrop-blur p-1 rounded-full border border-slate-200 shadow-sm">
+                      {isEditing ? (
+                        <button
+                          onClick={handleSaveAta}
+                          className="px-4 py-1.5 rounded-full text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm flex items-center gap-1.5 transition"
+                          title="Salvar"
+                        >
+                          <CheckCircle size={15} /> Salvar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setIsEditing(true)}
+                          className="px-4 py-1.5 rounded-full text-sm font-bold text-slate-700 hover:bg-white hover:shadow-sm flex items-center gap-1.5 transition"
+                          title="Editar"
+                        >
+                          <Edit3 size={15} /> Editar
+                        </button>
+                      )}
+                      <button
+                        onClick={handleGerarPDF}
+                        disabled={generatingPdf}
+                        className="px-4 py-1.5 rounded-full text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm flex items-center gap-1.5 disabled:opacity-60 transition"
+                        title="Baixar PDF"
+                      >
+                        {generatingPdf ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                        {generatingPdf ? "Gerando…" : "Baixar PDF"}
                       </button>
-                    )}
-
-                    <button onClick={() => setIsEditing(!isEditing)} className="p-2 bg-slate-100 rounded hover:bg-slate-200" title="Editar">
-                      <Edit3 size={18} />
-                    </button>
-                    <button onClick={handleDeleteClick} className="p-2 bg-slate-100 rounded hover:text-red-600" title="Excluir">
-                      <Trash2 size={18} />
+                    </div>
+                    {/* Excluir continua discreto em separado */}
+                    <button
+                      onClick={handleDeleteClick}
+                      className="p-2 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                      title="Excluir"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
