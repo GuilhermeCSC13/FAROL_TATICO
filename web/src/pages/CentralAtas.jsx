@@ -824,7 +824,9 @@ Estrutura obrigatória:
   };
 
   // ✅ PDF — render offscreen em largura fixa (independe do zoom da pagina)
-  // + assembly bloco-a-bloco pra evitar corte no meio de paragrafo/lista.
+  // + assembly bloco-a-bloco. Listas sao expandidas item a item pra nunca
+  // cortar texto entre paginas. Layout em padrao "ATA oficial" com cabecalho
+  // formal, secoes numeradas e rodape com paginacao.
   const handleGerarPDF = async () => {
     if (!selectedAta) return;
     try {
@@ -846,213 +848,289 @@ Estrutura obrigatória:
         ? calculateRealDuration(selectedAta.gravacao_inicio, selectedAta.gravacao_fim)
         : "";
 
-      // Constroi HTML estilizado (estilo dos prints que ficaram bonitinhos)
       const presentes = (presenca?.presentes || []).map((p) => p?.nome || "").filter(Boolean);
       const pautaMd = formatAtaMarkdown(editedPauta || selectedAta.pauta || "", { titulo, dataBR });
       const pautaHtml = mdToHtml(pautaMd);
 
-      const wrapper = document.createElement("div");
-      wrapper.id = "ata-printable";
-      wrapper.style.cssText = `
-        position: fixed; left: -10000px; top: 0; width: 794px;
-        background: #ffffff; padding: 0;
-        font-family: 'Inter','Segoe UI',Arial,sans-serif; color: #0f172a;
+      // CSS compartilhado pelos blocos (cada bloco e' rerenderizado num wrapper isolado)
+      const sharedCss = `
+        #ata-printable * { box-sizing: border-box; }
+        #ata-printable {
+          font-family: Georgia, 'Times New Roman', Times, serif;
+          color: #1f2937;
+        }
+        #ata-printable .doc-head {
+          border-bottom: 3px double #1e3a8a; padding: 0 0 16px 0;
+          text-align: center;
+        }
+        #ata-printable .doc-eyebrow {
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 10px; letter-spacing: 0.32em; font-weight: 700;
+          text-transform: uppercase; color: #1e3a8a; margin-bottom: 10px;
+        }
+        #ata-printable h1.doc-title {
+          font-size: 24px; font-weight: 700; color: #0f172a;
+          margin: 0 0 14px 0; line-height: 1.15;
+          letter-spacing: 0.01em;
+        }
+        #ata-printable .doc-meta {
+          display: flex; gap: 22px; flex-wrap: wrap; justify-content: center;
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 11.5px; color: #475569; margin-top: 6px;
+        }
+        #ata-printable .doc-meta b { color: #0f172a; font-weight: 700; }
+        #ata-printable .doc-dur {
+          margin-top: 10px; color: #1e3a8a; font-weight: 700; font-size: 11px;
+          font-family: 'Helvetica', Arial, sans-serif;
+          letter-spacing: 0.04em;
+        }
+        #ata-printable .presenca-card {
+          border: 1px solid #cbd5e1; border-radius: 4px; padding: 14px 16px;
+          background: #f8fafc; margin-top: 22px;
+        }
+        #ata-printable .presenca-head {
+          display: flex; justify-content: space-between; align-items: baseline;
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 10px; font-weight: 800; color: #1e3a8a;
+          text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 10px;
+        }
+        #ata-printable .presenca-count {
+          font-family: 'Helvetica', Arial, sans-serif;
+          background: #1e3a8a; color: #fff; padding: 2px 10px; border-radius: 999px;
+          font-weight: 800; font-size: 10px; letter-spacing: 0.06em;
+        }
+        #ata-printable .presenca-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        #ata-printable .presenca-chip {
+          font-family: 'Helvetica', Arial, sans-serif;
+          background: #e0e7ff; color: #1e3a8a; border: 1px solid #c7d2fe;
+          font-size: 10.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+        }
+        /* Secoes da ata */
+        #ata-printable .ata-h1 {
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 18px; font-weight: 800; color: #0f172a;
+          margin: 0; padding: 0;
+          text-align: center; letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        #ata-printable .ata-section-title {
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 13px; font-weight: 800; color: #fff;
+          background: #1e3a8a;
+          margin: 0; padding: 8px 14px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          border-radius: 2px;
+        }
+        #ata-printable .ata-h3 {
+          font-family: 'Helvetica', Arial, sans-serif;
+          font-size: 12px; font-weight: 800; color: #1e293b;
+          margin: 0; padding: 4px 0;
+          letter-spacing: 0.04em;
+        }
+        #ata-printable .ata-p {
+          font-size: 12px; color: #1f2937; line-height: 1.65;
+          margin: 0; padding: 0;
+          text-align: justify;
+          text-indent: 1.4em;
+        }
+        #ata-printable .ata-li {
+          font-size: 12px; color: #1f2937; line-height: 1.6;
+          margin: 0; padding: 0 0 0 28px; position: relative;
+        }
+        #ata-printable .ata-li.ul-style::before {
+          content: ""; position: absolute; left: 12px; top: 9px;
+          width: 5px; height: 5px; border-radius: 50%; background: #1e3a8a;
+        }
+        #ata-printable .ata-li.ol-style::before {
+          content: attr(data-num) ".";
+          position: absolute; left: 0; top: 0;
+          color: #1e3a8a; font-weight: 800; font-size: 12px;
+          width: 24px; text-align: right; padding-right: 4px;
+          font-family: 'Helvetica', Arial, sans-serif;
+        }
+        #ata-printable .ata-li strong { color: #0f172a; font-weight: 700; }
+        #ata-printable .ata-li em { color: #475569; font-style: italic; }
+        #ata-printable .ata-p strong { color: #0f172a; font-weight: 700; }
+        #ata-printable .ata-p em { color: #475569; font-style: italic; }
+        #ata-printable .ata-hr {
+          border: 0; border-top: 1px solid #e2e8f0;
+          margin: 0; padding: 0;
+        }
       `;
-      wrapper.innerHTML = `
-        <style>
-          #ata-printable * { box-sizing: border-box; }
-          #ata-printable .doc-head {
-            border-bottom: 3px solid #1e3a8a; padding: 28px 32px 18px 32px;
-          }
-          #ata-printable .doc-eyebrow {
-            font-size: 10px; letter-spacing: 0.18em; font-weight: 800;
-            text-transform: uppercase; color: #1e3a8a; margin-bottom: 6px;
-          }
-          #ata-printable h1.doc-title {
-            font-size: 22px; font-weight: 800; color: #0f172a;
-            margin: 0 0 10px 0; line-height: 1.2;
-          }
-          #ata-printable .doc-meta {
-            display: flex; gap: 18px; flex-wrap: wrap;
-            font-size: 12px; color: #475569; margin-top: 4px;
-          }
-          #ata-printable .doc-meta b { color: #0f172a; font-weight: 700; }
-          #ata-printable .doc-dur {
-            margin-top: 6px; color: #b91c1c; font-weight: 700; font-size: 12px;
-          }
-          #ata-printable .doc-body { padding: 22px 32px 28px 32px; }
-          #ata-printable .presenca-card {
-            border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;
-            background: #f8fafc; margin-bottom: 22px;
-          }
-          #ata-printable .presenca-head {
-            display: flex; justify-content: space-between; align-items: center;
-            font-size: 10px; font-weight: 800; color: #475569;
-            text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px;
-          }
-          #ata-printable .presenca-count {
-            background: #fff; padding: 3px 8px; border-radius: 6px;
-            border: 1px solid #e2e8f0; color: #0f172a; font-weight: 800;
-          }
-          #ata-printable .presenca-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-          #ata-printable .presenca-chip {
-            background: #dcfce7; color: #166534; border: 1px solid #86efac;
-            font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
-          }
-          #ata-printable .pauta h1 {
-            font-size: 18px; font-weight: 800; color: #0f172a;
-            margin: 0 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;
-          }
-          #ata-printable .pauta h2 {
-            font-size: 14px; font-weight: 800; color: #1d4ed8;
-            margin: 22px 0 10px 0;
-          }
-          #ata-printable .pauta h3 {
-            font-size: 12px; font-weight: 800; color: #1e293b;
-            margin: 14px 0 6px 0;
-          }
-          #ata-printable .pauta p {
-            font-size: 11.5px; color: #334155; line-height: 1.55;
-            margin: 0 0 9px 0;
-          }
-          #ata-printable .pauta ul, #ata-printable .pauta ol {
-            margin: 4px 0 12px 0; padding-left: 0; list-style: none;
-          }
-          #ata-printable .pauta li {
-            font-size: 11.5px; color: #334155; line-height: 1.55;
-            padding-left: 16px; position: relative; margin-bottom: 5px;
-          }
-          #ata-printable .pauta ul li::before {
-            content: ""; position: absolute; left: 4px; top: 9px;
-            width: 5px; height: 5px; border-radius: 50%; background: #1d4ed8;
-          }
-          #ata-printable .pauta ol { counter-reset: ata-ol; }
-          #ata-printable .pauta ol li { counter-increment: ata-ol; }
-          #ata-printable .pauta ol li::before {
-            content: counter(ata-ol) "."; position: absolute; left: 0; top: 0;
-            color: #1d4ed8; font-weight: 800; font-size: 11.5px;
-          }
-          #ata-printable .pauta strong { color: #0f172a; font-weight: 800; }
-          #ata-printable .pauta em { color: #475569; font-style: italic; }
-          #ata-printable .pauta hr {
-            border: 0; border-top: 1px solid #e2e8f0; margin: 18px 0;
-          }
-          #ata-printable .nobreak { break-inside: avoid; page-break-inside: avoid; }
-        </style>
-        <div class="doc-head nobreak">
-          <div class="doc-eyebrow">Farol Tatico • Ata Oficial</div>
+
+      // Monta o cabecalho HTML
+      const headHtml = `
+        <div class="doc-head">
+          <div class="doc-eyebrow">Farol Tatico — Ata Oficial</div>
           <h1 class="doc-title">${escapeHtml(titulo)}</h1>
           <div class="doc-meta">
             ${dataBR ? `<span><b>Data:</b> ${dataBR}</span>` : ""}
-            <span><b>Horario:</b> ${horaIni} - ${horaFim}</span>
+            <span><b>Horario:</b> ${horaIni} — ${horaFim}</span>
             ${presentes.length ? `<span><b>Presentes:</b> ${presentes.length}</span>` : ""}
           </div>
           ${duracao ? `<div class="doc-dur">Duracao real: ${escapeHtml(duracao)}</div>` : ""}
         </div>
-        <div class="doc-body">
-          ${presentes.length ? `
-            <div class="presenca-card nobreak">
-              <div class="presenca-head">
-                <span>Lista de Presenca</span>
-                <span class="presenca-count">${presentes.length}</span>
-              </div>
-              <div class="presenca-chips">
-                ${presentes.map((n) => `<span class="presenca-chip">${escapeHtml(n)}</span>`).join("")}
-              </div>
-            </div>
-          ` : ""}
-          <div class="pauta">${pautaHtml}</div>
-        </div>
       `;
-      document.body.appendChild(wrapper);
 
-      try {
-        // Renderiza bloco a bloco pra evitar corte no meio de paragrafo
-        const head = wrapper.querySelector(".doc-head");
-        const body = wrapper.querySelector(".doc-body");
-        const presencaCard = body?.querySelector(".presenca-card");
-        const pauta = body?.querySelector(".pauta");
+      const presencaHtml = presentes.length ? `
+        <div class="presenca-card">
+          <div class="presenca-head">
+            <span>Lista de Presenca</span>
+            <span class="presenca-count">${presentes.length}</span>
+          </div>
+          <div class="presenca-chips">
+            ${presentes.map((n) => `<span class="presenca-chip">${escapeHtml(n)}</span>`).join("")}
+          </div>
+        </div>
+      ` : "";
 
-        const renderEl = async (el, width = 794) => {
-          const tmp = document.createElement("div");
-          tmp.style.cssText = `position: fixed; left: -10000px; top: 0; width: ${width}px; background: #fff;`;
-          tmp.appendChild(el.cloneNode(true));
-          // copia o <style> do wrapper original
-          const style = wrapper.querySelector("style");
-          if (style) tmp.insertBefore(style.cloneNode(true), tmp.firstChild);
-          tmp.id = "ata-printable";
-          document.body.appendChild(tmp);
-          try {
-            return await html2canvas(tmp, {
-              scale: 2.5, useCORS: true, backgroundColor: "#ffffff", logging: false,
+      // Helper que renderiza um pedaco de HTML em canvas
+      const renderHtml = async (innerHtml, { width = 794, padX = 64, padY = 0 } = {}) => {
+        const tmp = document.createElement("div");
+        tmp.id = "ata-printable";
+        tmp.style.cssText = `position: fixed; left: -10000px; top: 0; width: ${width}px; background: #fff; padding: ${padY}px ${padX}px;`;
+        const style = document.createElement("style");
+        style.textContent = sharedCss;
+        tmp.appendChild(style);
+        const content = document.createElement("div");
+        content.innerHTML = innerHtml;
+        tmp.appendChild(content);
+        document.body.appendChild(tmp);
+        try {
+          return await html2canvas(tmp, {
+            scale: 2.5, useCORS: true, backgroundColor: "#ffffff", logging: false,
+          });
+        } finally {
+          tmp.remove();
+        }
+      };
+
+      // Expande o HTML da pauta em micro-blocos (cada item de lista vira um bloco
+      // unico pra nunca cortar texto). Tambem preserva numeracao.
+      const tempPauta = document.createElement("div");
+      tempPauta.innerHTML = pautaHtml;
+      const microBlocks = [];
+      Array.from(tempPauta.children).forEach((child) => {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "ul") {
+          Array.from(child.querySelectorAll(":scope > li")).forEach((li) => {
+            microBlocks.push({
+              type: "li-ul",
+              html: `<div class="ata-li ul-style">${li.innerHTML}</div>`,
             });
-          } finally {
-            tmp.remove();
-          }
-        };
-
-        // Lista de blocos: cabecalho + presenca + cada bloco filho de pauta
-        const blocks = [];
-        if (head) blocks.push(head);
-        if (presencaCard) blocks.push(presencaCard);
-        if (pauta) {
-          Array.from(pauta.children).forEach((child) => blocks.push(child));
+          });
+        } else if (tag === "ol") {
+          Array.from(child.querySelectorAll(":scope > li")).forEach((li, idx) => {
+            microBlocks.push({
+              type: "li-ol",
+              html: `<div class="ata-li ol-style" data-num="${idx + 1}">${li.innerHTML}</div>`,
+            });
+          });
+        } else if (tag === "h1") {
+          microBlocks.push({ type: "h1", html: `<div class="ata-h1">${child.innerHTML}</div>` });
+        } else if (tag === "h2") {
+          microBlocks.push({ type: "h2", html: `<div class="ata-section-title">${child.innerHTML}</div>` });
+        } else if (tag === "h3") {
+          microBlocks.push({ type: "h3", html: `<div class="ata-h3">${child.innerHTML}</div>` });
+        } else if (tag === "p") {
+          microBlocks.push({ type: "p", html: `<div class="ata-p">${child.innerHTML}</div>` });
+        } else if (tag === "hr") {
+          microBlocks.push({ type: "hr", html: `<div class="ata-hr"></div>` });
+        } else {
+          microBlocks.push({ type: "other", html: child.outerHTML });
         }
+      });
 
-        const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 12;
-        const maxW = pageW - margin * 2;
-        const maxH = pageH - margin * 2;
-
-        let cursorY = margin;
-        let isFirstPage = true;
-
-        for (const block of blocks) {
-          const canvas = await renderEl(block);
-          const imgH = (canvas.height * maxW) / canvas.width;
-
-          if (!isFirstPage && cursorY + imgH > pageH - margin) {
-            pdf.addPage();
-            cursorY = margin;
-          }
-
-          // Se o bloco unico for maior que uma pagina, paginamos ele
-          if (imgH > maxH) {
-            // imprime fatiando
-            let sliceTop = 0;
-            while (sliceTop < canvas.height) {
-              const sliceH = Math.min(canvas.height - sliceTop, (canvas.width * maxH) / maxW);
-              const sliceCanvas = document.createElement("canvas");
-              sliceCanvas.width = canvas.width;
-              sliceCanvas.height = sliceH;
-              const ctx = sliceCanvas.getContext("2d");
-              ctx.fillStyle = "#fff";
-              ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-              ctx.drawImage(canvas, 0, -sliceTop);
-              const sliceImg = sliceCanvas.toDataURL("image/jpeg", 0.92);
-              const sliceMm = (sliceH * maxW) / canvas.width;
-              if (!isFirstPage) pdf.addPage();
-              pdf.addImage(sliceImg, "JPEG", margin, margin, maxW, sliceMm);
-              sliceTop += sliceH;
-              isFirstPage = false;
-              cursorY = margin + sliceMm + 4;
-            }
-          } else {
-            const imgData = canvas.toDataURL("image/jpeg", 0.92);
-            pdf.addImage(imgData, "JPEG", margin, cursorY, maxW, imgH);
-            cursorY += imgH + 4;
-            isFirstPage = false;
-          }
+      // Espacamento entre tipos de bloco (em mm, no PDF final)
+      const gapAfter = (type, nextType) => {
+        if (type === "h1") return 8;
+        if (type === "h2") return 4;
+        if (type === "h3") return 2;
+        if (type === "p") return 4;
+        if (type === "hr") return 6;
+        if (type === "li-ul" || type === "li-ol") {
+          if (nextType === "li-ul" || nextType === "li-ol") return 1.5;
+          return 6;
         }
+        return 4;
+      };
 
-        const safe = (selectedAta?.titulo || "Ata").replace(/[\\/:*?"<>|]/g, " ").trim();
-        const fileName = `ATA - ${safe}${dataBR ? " - " + dataBR : ""}.pdf`;
-        pdf.save(fileName);
-      } finally {
-        wrapper.remove();
+      // Monta PDF
+      const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 16;
+      const footerH = 10;
+      const maxW = pageW - margin * 2;
+      const usableBottom = pageH - margin - footerH; // espaco real pra conteudo
+      const headerYStart = margin;
+
+      let cursorY = headerYStart;
+
+      const ensureSpace = (h) => {
+        if (cursorY + h > usableBottom) {
+          pdf.addPage();
+          cursorY = headerYStart;
+          return true;
+        }
+        return false;
+      };
+
+      const drawBlockCanvas = async (innerHtml, { topGap = 0 } = {}) => {
+        const canvas = await renderHtml(innerHtml);
+        const imgH = (canvas.height * maxW) / canvas.width;
+        if (topGap > 0 && cursorY > headerYStart) cursorY += topGap;
+        ensureSpace(imgH);
+        const imgData = canvas.toDataURL("image/jpeg", 0.94);
+        pdf.addImage(imgData, "JPEG", margin, cursorY, maxW, imgH);
+        cursorY += imgH;
+        return imgH;
+      };
+
+      // 1) Cabecalho (sempre na primeira pagina)
+      await drawBlockCanvas(headHtml);
+
+      // 2) Lista de presenca (opcional)
+      if (presencaHtml) {
+        await drawBlockCanvas(presencaHtml, { topGap: 6 });
       }
+
+      // 3) Micro-blocos da pauta
+      for (let i = 0; i < microBlocks.length; i++) {
+        const block = microBlocks[i];
+        const nextType = microBlocks[i + 1]?.type;
+        // Gap antes de h2/h1 fica maior
+        const topGap = block.type === "h2" ? 10 : block.type === "h1" ? 12 : 4;
+        await drawBlockCanvas(block.html, { topGap });
+        // Pequeno espaco extra apos certo tipos (gerenciado pelo gap do PROXIMO)
+        cursorY += gapAfter(block.type, nextType) - 4; // 4 ja' contado em topGap do prox
+      }
+
+      // 4) Rodape com numeracao em todas paginas
+      const totalPages = pdf.internal.getNumberOfPages();
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(120);
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p);
+        const footerY = pageH - 8;
+        pdf.text(
+          `${titulo}${dataBR ? " — " + dataBR : ""}`,
+          margin,
+          footerY
+        );
+        pdf.text(
+          `Pagina ${p} de ${totalPages}`,
+          pageW - margin,
+          footerY,
+          { align: "right" }
+        );
+      }
+
+      const safe = (selectedAta?.titulo || "Ata").replace(/[\\/:*?"<>|]/g, " ").trim();
+      const fileName = `ATA - ${safe}${dataBR ? " - " + dataBR : ""}.pdf`;
+      pdf.save(fileName);
     } catch (e) {
       console.error("Erro ao gerar PDF:", e);
       alert("Erro ao gerar PDF: " + (e?.message || "Falha desconhecida"));
