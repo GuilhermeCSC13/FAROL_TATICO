@@ -63,25 +63,66 @@ serve(async (req: Request) => {
 
   const model = String(body?.model || DEFAULT_MODEL);
 
+  // Upload de arquivo grande via Files API (ate 2GB). Usado quando o caller
+  // manda `{ mediaUrl, mimeType }` em vez de inlineData (que estoura o
+  // limite de body das Edge Functions com audios/videos longos).
+  async function uploadFromUrl(mediaUrl: string, mimeType: string) {
+    const r = await fetch(mediaUrl);
+    if (!r.ok) throw new Error(`Falha ao baixar mediaUrl (${r.status})`);
+    const bytes = await r.arrayBuffer();
+    const up = await fetch(
+      `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": mimeType, "X-Goog-Upload-Protocol": "raw" },
+        body: bytes,
+      },
+    );
+    if (!up.ok) throw new Error(`Files API ${up.status}: ${await up.text()}`);
+    const data = await up.json();
+    const uri = data?.file?.uri;
+    if (!uri) throw new Error("Files API nao retornou uri");
+    return uri as string;
+  }
+
   // Aceita atalho `prompt: string` ou `contents` direto da REST API.
   let contents = body?.contents;
   if (!Array.isArray(contents)) {
     if (typeof body?.prompt === "string") {
-      contents = [{ role: "user", parts: [{ text: body.prompt }] }];
+      const parts: any[] = [{ text: body.prompt }];
+      if (body?.mediaUrl && body?.mimeType) {
+        try {
+          const uri = await uploadFromUrl(String(body.mediaUrl), String(body.mimeType));
+          parts.push({ file_data: { file_uri: uri, mime_type: String(body.mimeType) } });
+        } catch (e) {
+          return json({ error: String((e as Error)?.message || e) }, 502);
+        }
+      }
+      contents = [{ role: "user", parts }];
     } else if (Array.isArray(body?.prompt)) {
-      // formato do SDK: array misto de string e { inlineData }
-      const parts = body.prompt.map((p: any) => {
-        if (typeof p === "string") return { text: p };
-        if (p?.inlineData) {
-          return {
+      // formato do SDK: array misto de string, { inlineData } e { mediaUrl, mimeType }
+      const parts: any[] = [];
+      for (const p of body.prompt) {
+        if (typeof p === "string") {
+          parts.push({ text: p });
+        } else if (p?.mediaUrl && p?.mimeType) {
+          try {
+            const uri = await uploadFromUrl(String(p.mediaUrl), String(p.mimeType));
+            parts.push({ file_data: { file_uri: uri, mime_type: String(p.mimeType) } });
+          } catch (e) {
+            return json({ error: String((e as Error)?.message || e) }, 502);
+          }
+        } else if (p?.inlineData) {
+          parts.push({
             inline_data: {
               mime_type: p.inlineData.mimeType,
               data: p.inlineData.data,
             },
-          };
+          });
+        } else {
+          parts.push(p);
         }
-        return p;
-      });
+      }
       contents = [{ role: "user", parts }];
     } else {
       return json({ error: "envie `prompt` ou `contents`" }, 400);

@@ -667,22 +667,18 @@ export default function CentralAtas() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch(audioUrl);
-      if (!response.ok) throw new Error("Falha ao baixar o arquivo de mídia.");
+      // Antes baixavamos e mandavamos base64 — estourava o limite de body
+      // da Edge Function. Agora passamos a URL e o proxy faz upload pelo
+      // Files API do Gemini (ate 2GB).
+      const mimeType = mediaUrls.audio ? "audio/mp4" : "video/mp4";
+      const model = getGeminiFlash();
 
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
+      const titulo = selectedAta.titulo || "Ata da Reunião";
+      const dataBR = selectedAta.data_hora
+        ? new Date(selectedAta.data_hora).toLocaleDateString("pt-BR")
+        : "";
 
-      reader.onloadend = async () => {
-        try {
-          const base64data = reader.result.split(",")[1];
-          const model = getGeminiFlash();
-
-          const titulo = selectedAta.titulo || "Ata da Reunião";
-          const dataBR = selectedAta.data_hora ? new Date(selectedAta.data_hora).toLocaleDateString("pt-BR") : "";
-
-          let promptTemplate = `
+      let promptTemplate = `
 Você é uma secretária executiva sênior, especializada em reuniões operacionais e táticas.
 
 Utilize EXCLUSIVAMENTE as informações contidas no áudio/vídeo fornecido.
@@ -704,33 +700,49 @@ Estrutura obrigatória:
 (Lista em bullets. Se não houver: "Nenhuma ação foi definida nesta reunião.")
 `.trim();
 
-          const { data: promptData } = await supabase.from("app_prompts").select("prompt_text").eq("slug", "ata_reuniao").maybeSingle();
-          if (promptData?.prompt_text) promptTemplate = promptData.prompt_text;
+      const { data: promptData } = await supabase
+        .from("app_prompts")
+        .select("prompt_text")
+        .eq("slug", "ata_reuniao")
+        .maybeSingle();
+      if (promptData?.prompt_text) promptTemplate = promptData.prompt_text;
 
-          const finalPrompt = promptTemplate.replace(/{titulo}/g, titulo).replace(/{data}/g, dataBR);
-          const mimeType = blob.type || "video/mp4";
+      const finalPrompt = promptTemplate
+        .replace(/{titulo}/g, titulo)
+        .replace(/{data}/g, dataBR);
 
-          const result = await model.generateContent([finalPrompt, { inlineData: { data: base64data, mimeType } }]);
-          const textoBruto = result.response.text();
-          const textoFormatado = formatAtaMarkdown(textoBruto, { titulo, dataBR });
+      const result = await model.generateContent([
+        finalPrompt,
+        { mediaUrl: audioUrl, mimeType },
+      ]);
+      const textoBruto = result.response.text();
+      const textoFormatado = formatAtaMarkdown(textoBruto, { titulo, dataBR });
 
-          await supabase.from("reunioes").update({ pauta: textoFormatado, ata_ia_status: "PRONTA" }).eq("id", selectedAta.id);
+      await supabase
+        .from("reunioes")
+        .update({ pauta: textoFormatado, ata_ia_status: "PRONTA" })
+        .eq("id", selectedAta.id);
 
-          setEditedPauta(textoFormatado);
-          setIsEditing(false);
-          setSelectedAta((prev) => ({ ...prev, pauta: textoFormatado, ata_ia_status: "PRONTA" }));
-          setAtas((prev) => prev.map((a) => (a.id === selectedAta.id ? { ...a, pauta: textoFormatado, ata_ia_status: "PRONTA" } : a)));
+      setEditedPauta(textoFormatado);
+      setIsEditing(false);
+      setSelectedAta((prev) => ({
+        ...prev,
+        pauta: textoFormatado,
+        ata_ia_status: "PRONTA",
+      }));
+      setAtas((prev) =>
+        prev.map((a) =>
+          a.id === selectedAta.id
+            ? { ...a, pauta: textoFormatado, ata_ia_status: "PRONTA" }
+            : a
+        )
+      );
 
-          alert("Ata gerada e salva automaticamente!");
-        } catch (err) {
-          console.error(err);
-          alert("Erro na IA: " + err.message);
-        } finally {
-          setIsGenerating(false);
-        }
-      };
-    } catch (e) {
-      alert("Erro download áudio: " + e.message);
+      alert("Ata gerada e salva automaticamente!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro na IA: " + err.message);
+    } finally {
       setIsGenerating(false);
     }
   };
