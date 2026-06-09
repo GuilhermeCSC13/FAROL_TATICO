@@ -92,7 +92,10 @@ function parseNumberPtBr(raw) {
 const ManutencaoRotinas = () => {
   const [searchParams] = useSearchParams();
   const [areas, setAreas] = useState(AREAS_MANUTENCAO);
-  const [areaSelecionada, setAreaSelecionada] = useState(ID_GESTAO_FROTA);
+  const [areaSelecionada, setAreaSelecionada] = useState(() => {
+    const param = Number(searchParams.get("area"));
+    return [ID_GESTAO_FROTA, ID_PCM].includes(param) ? param : ID_GESTAO_FROTA;
+  });
   const [rotinas, setRotinas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showConfig, setShowConfig] = useState(false);
