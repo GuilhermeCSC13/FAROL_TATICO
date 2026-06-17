@@ -6,3 +6,61 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 }
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide navigation sidebar */
+  aside.w-64 {
+    display: none !important;
+  }
+
+  /* Hide atas list sidebar */
+  .w-80 {
+    display: none !important;
+  }
+
+  /* Hide floating elements: recorder dock, tactical assistant, modals */
+  .fixed,
+  [class*="RecorderDock"] {
+    display: none !important;
+  }
+
+  /* Remove all height/overflow constraints so content flows naturally */
+  .h-screen,
+  .min-h-screen {
+    height: auto !important;
+    min-height: unset !important;
+  }
+
+  .overflow-hidden,
+  .overflow-auto,
+  .overflow-y-auto {
+    overflow: visible !important;
+  }
+
+  /* Main layout should be block, not flex with constraints */
+  main.flex-1 {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Remove shadows for cleaner print */
+  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
+    box-shadow: none !important;
+  }
+
+  /* Avoid breaking inside content cards */
+  .rounded-2xl, .rounded-xl {
+    break-inside: avoid;
+  }
+}
