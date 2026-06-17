@@ -14,13 +14,19 @@ body {
     margin: 15mm;
   }
 
-  html, body {
-    height: auto !important;
+  * {
     overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+  }
+
+  html, body {
+    width: 100% !important;
   }
 
   /* Hide navigation sidebar */
-  aside.w-64 {
+  aside {
     display: none !important;
   }
 
@@ -29,29 +35,31 @@ body {
     display: none !important;
   }
 
-  /* Hide floating elements: recorder dock, tactical assistant, modals */
+  /* Hide floating elements: recorder dock, tactical assistant, modals, overlays */
   .fixed,
-  [class*="RecorderDock"] {
+  .absolute {
     display: none !important;
   }
 
-  /* Remove all height/overflow constraints so content flows naturally */
-  .h-screen,
-  .min-h-screen {
-    height: auto !important;
-    min-height: unset !important;
+  /* Restore content that uses absolute/relative inside the flow */
+  .relative {
+    position: static !important;
   }
 
-  .overflow-hidden,
-  .overflow-auto,
-  .overflow-y-auto {
-    overflow: visible !important;
-  }
-
-  /* Main layout should be block, not flex with constraints */
+  /* Remove flex constraints on layout wrappers */
+  .flex.h-screen,
+  .flex.min-h-screen,
   main.flex-1 {
-    height: auto !important;
-    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+  }
+
+  /* Main content area must be visible */
+  .flex-1.overflow-y-auto,
+  .flex-1.overflow-auto {
+    display: block !important;
+    position: static !important;
+    padding: 0 !important;
   }
 
   /* Remove shadows for cleaner print */
@@ -59,8 +67,8 @@ body {
     box-shadow: none !important;
   }
 
-  /* Avoid breaking inside content cards */
-  .rounded-2xl, .rounded-xl {
+  /* Avoid breaking inside content cards and paragraphs */
+  .rounded-2xl, .rounded-xl, p {
     break-inside: avoid;
   }
 }
