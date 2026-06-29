@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 // ✅ IMPORTAÇÃO CORRETA: Trazendo os dois clientes
-import { supabase, supabaseInove } from "../supabaseClient"; 
+import { supabase, supabaseInove } from "../supabaseClient";
+import { podeAcessarFarol } from "../utils/farolAccess";
 import { LogIn, Lock, User, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -82,6 +83,19 @@ export default function LandingFarol() {
         if (signInError) {
           console.warn("Sessão authenticated não abriu (contingência):", signInError.message);
         }
+      }
+
+      // 2.1) GOVERNANCA: nem todos os niveis acessam o Farol. Mesma regra do
+      //      INOVE (flag farol_liberado por nivel em app_niveis_acesso).
+      const { data: niveis } = await supabaseInove
+        .from("app_niveis_acesso")
+        .select("nome, farol_liberado");
+
+      if (!podeAcessarFarol(usuario.nivel, niveis || [])) {
+        try { await supabaseInove.auth.signOut(); } catch {}
+        setErrorMsg("Seu nivel de acesso nao tem permissao para o Farol Tatico.");
+        setLoading(false);
+        return;
       }
 
       // 3. SUCESSO
