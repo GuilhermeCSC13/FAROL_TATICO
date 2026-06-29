@@ -21,9 +21,10 @@ export default function LandingFarol() {
     localStorage.removeItem("sb-access-token");
     sessionStorage.clear();
     
-    // Garante logout local
+    // Garante logout local (nos dois bancos: Farol e Inove)
     const cleanSession = async () => {
         try { await supabase.auth.signOut(); } catch {}
+        try { await supabaseInove.auth.signOut(); } catch {}
     };
     cleanSession();
   }, []);
@@ -44,42 +45,59 @@ export default function LandingFarol() {
     }
 
     try {
-      // ✅ O PULO DO GATO:
-      // Usamos 'supabaseInove' para buscar na tabela 'usuarios_aprovadores'
-      // que realmente existe no outro banco.
-      const { data, error } = await supabaseInove
-        .from("usuarios_aprovadores") 
-        .select("*")
-        .or(`login.eq.${termo},email.eq.${termo}`) 
-        .eq("senha", pass)
-        .eq("ativo", true)
-        .maybeSingle();
+      // 1) Valida pela RPC segura do Inove: a senha é conferida DENTRO do banco
+      //    (SECURITY DEFINER); o Farol NUNCA lê a coluna senha. Funciona mesmo
+      //    com a RLS ligada (anon bloqueado).
+      const { data: usuario, error } = await supabaseInove.rpc("verify_legacy_login", {
+        p_identifier: termo,
+        p_senha: pass,
+      });
 
       if (error) {
         console.error("Erro na conexão Inove:", error);
         throw new Error("Erro ao validar credenciais no Inove.");
       }
 
-      if (!data) {
+      if (!usuario) {
         setErrorMsg("Usuário ou senha incorretos.");
         setLoading(false);
         return;
       }
 
+      if (usuario.ativo === false) {
+        setErrorMsg("Sua conta está inativa no momento.");
+        setLoading(false);
+        return;
+      }
+
+      // 2) Abre a sessão REAL (authenticated) no Inove, pra RLS liberar as
+      //    leituras de usuarios_aprovadores. Se a conta Auth ainda não existir,
+      //    segue em contingência (anon) sem travar o acesso.
+      const emailLogin = String(usuario.email || "").trim().toLowerCase();
+      if (emailLogin) {
+        const { error: signInError } = await supabaseInove.auth.signInWithPassword({
+          email: emailLogin,
+          password: pass,
+        });
+        if (signInError) {
+          console.warn("Sessão authenticated não abriu (contingência):", signInError.message);
+        }
+      }
+
       // 3. SUCESSO
       const usuarioOficial = {
-        id: data.id,
-        nome: data.nome || data.login,
-        email: data.email,
-        nivel: data.nivel,
-        login: data.login,
-        setor: data.setor || "N/A",
-        origem: "Login Manual Farol (Via Inove)"
+        id: usuario.id,
+        nome: usuario.nome || usuario.login,
+        email: usuario.email,
+        nivel: usuario.nivel,
+        login: usuario.login,
+        setor: usuario.setor || "N/A",
+        origem: "Login Farol (Auth Inove)"
       };
 
       // Grava a sessão localmente no Farol
       localStorage.setItem("usuario_externo", JSON.stringify(usuarioOficial));
-      
+
       // Entra no sistema
       navigate("/inicio", { replace: true });
 
