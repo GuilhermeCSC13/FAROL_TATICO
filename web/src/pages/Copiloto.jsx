@@ -600,20 +600,28 @@ export default function Copiloto() {
     const senha = String(senhaAdm || "").trim();
     if (!senha) return alert("Informe a senha.");
 
-    const { data, error } = await supabaseInove
-      .from("usuarios_aprovadores")
-      .select("id, nivel, ativo")
-      .eq("senha", senha)
-      .eq("nivel", "Administrador")
-      .eq("ativo", true)
-      .maybeSingle();
+    // Confirma com a conta logada (login do usuario_externo) + senha, via RPC
+    // segura. Mais seguro que validar so pela senha: amarra a acao ao admin
+    // logado e nunca le a senha em texto puro.
+    let loginAtual = "";
+    try {
+      loginAtual = JSON.parse(localStorage.getItem("usuario_externo") || "{}")?.login || "";
+    } catch {}
+    if (!loginAtual) return alert("Sessao nao encontrada. Faca login novamente.");
+
+    const { data, error } = await supabaseInove.rpc("verify_legacy_login", {
+      p_identifier: loginAtual,
+      p_senha: senha,
+    });
 
     if (error) {
       console.error("validarSenhaAdm:", error);
       return alert("Erro ao validar senha.");
     }
 
-    if (!data?.id) return alert("Senha inválida.");
+    if (!data?.id || data.ativo === false || data.nivel !== "Administrador") {
+      return alert("Senha invalida ou sem permissao de Administrador.");
+    }
 
     const { error: e2 } = await supabase
       .from("reunioes")

@@ -621,13 +621,11 @@ export default function TiposReuniao() {
     }
     setDeleting(true);
     try {
-      const { data: usuario, error: authError } = await supabaseInove
-        .from("usuarios_aprovadores")
-        .select("id, nivel, ativo")
-        .eq("login", delLogin)
-        .eq("senha", delSenha)
-        .eq("ativo", true)
-        .maybeSingle();
+      const { data: _u, error: authError } = await supabaseInove.rpc("verify_legacy_login", {
+        p_identifier: delLogin,
+        p_senha: delSenha,
+      });
+      const usuario = _u && _u.ativo !== false ? _u : null;
 
       if (authError) throw authError;
       if (!usuario) {

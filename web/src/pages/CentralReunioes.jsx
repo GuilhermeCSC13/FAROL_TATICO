@@ -478,13 +478,11 @@ export default function CentralReunioes() {
     setDeleting(true);
 
     try {
-      const { data: usuario, error: errAuth } = await supabaseInove
-        .from("usuarios_aprovadores")
-        .select("id, login, senha, nivel, ativo")
-        .eq("login", delLogin)
-        .eq("senha", delSenha)
-        .eq("ativo", true)
-        .maybeSingle();
+      const { data: _u, error: errAuth } = await supabaseInove.rpc("verify_legacy_login", {
+        p_identifier: delLogin,
+        p_senha: delSenha,
+      });
+      const usuario = _u && _u.ativo !== false ? _u : null;
 
       if (errAuth) throw errAuth;
 

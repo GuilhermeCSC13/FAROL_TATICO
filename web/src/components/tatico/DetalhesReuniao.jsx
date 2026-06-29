@@ -350,13 +350,11 @@ export default function DetalhesReuniao({
     if (!authLoginMat || !authSenhaMat) return alert("Informe Login e Senha.");
     setValidatingAuthMat(true);
     try {
-      const { data: usuario, error } = await supabaseInove
-        .from("usuarios_aprovadores")
-        .select("nivel, ativo")
-        .eq("login", authLoginMat)
-        .eq("senha", authSenhaMat)
-        .eq("ativo", true)
-        .maybeSingle();
+      const { data: _u, error } = await supabaseInove.rpc("verify_legacy_login", {
+        p_identifier: authLoginMat,
+        p_senha: authSenhaMat,
+      });
+      const usuario = _u && _u.ativo !== false ? _u : null;
 
       if (error) throw error;
       if (!usuario) {

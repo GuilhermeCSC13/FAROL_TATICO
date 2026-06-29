@@ -106,6 +106,7 @@ export default function LandingFarol() {
         nivel: usuario.nivel,
         login: usuario.login,
         setor: usuario.setor || "N/A",
+        farol_liberado: true,
         origem: "Login Farol (Auth Inove)"
       };
 

@@ -1,54 +1,42 @@
-import { useEffect } from "react";
-import { Outlet, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-function hasStoredExternalUser() {
+function getStoredExternalUser() {
   try {
     const v = localStorage.getItem("usuario_externo");
-    if (!v) return false;
+    if (!v) return null;
     const p = JSON.parse(v);
-    return !!(p && (p.nome || p.login));
+    return p && (p.nome || p.login) ? p : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Governanca: so e autorizado quem passou pelo gate do login (farol_liberado).
+// Bloqueia sessao antiga/forjada no localStorage que nao tenha a permissao.
+function isFarolAuthorized() {
+  const u = getStoredExternalUser();
+  return !!(u && u.farol_liberado === true);
 }
 
 export default function RequireFarolAuth() {
   const location = useLocation();
-  const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
   const userDataParam = params.get("userData");
 
-  // 🔴 CORREÇÃO CRÍTICA:
-  // Se existir "userData" na URL, NÃO deixe entrar na rota protegida (ex: /inicio)
-  // mesmo que tenha alguém logado no storage.
-  // Mande para o Landing (/) processar a troca de usuário primeiro.
+  // Se existir "userData" na URL, manda para o Landing processar a troca de
+  // usuario primeiro (nao entra direto na rota protegida).
   if (userDataParam) {
-    // Redireciona para a raiz mantendo os parâmetros de URL para o LandingFarol ler
     return <Navigate to={`/${location.search}`} replace />;
   }
 
-  useEffect(() => {
-    const run = async () => {
-      // 1. Verifica localStorage
-      if (hasStoredExternalUser()) return;
-
-      // 2. Verifica Supabase
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) return;
-      } catch {}
-
-      // 3. Se não tiver login, redireciona para o Landing
-      const sp = new URLSearchParams();
-      if (location.pathname !== "/") {
-        sp.set("next", location.pathname + location.search);
-      }
-      navigate(`/?${sp.toString()}`, { replace: true });
-    };
-
-    run();
-  }, [location, navigate]);
+  // Sem autorizacao valida -> volta para o login (sincrono, sem flash da tela).
+  if (!isFarolAuthorized()) {
+    const sp = new URLSearchParams();
+    if (location.pathname !== "/") {
+      sp.set("next", location.pathname + location.search);
+    }
+    return <Navigate to={`/?${sp.toString()}`} replace />;
+  }
 
   return <Outlet />;
 }
