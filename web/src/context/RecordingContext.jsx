@@ -821,6 +821,80 @@ export function RecordingProvider({ children }) {
     }
   };
 
+  // 🔁 RECUPERAR gravação que caiu (foi pro login) SEM regravar.
+  // As partes já foram enviadas ao Supabase a cada 5 min (bucket/prefix da
+  // sessão). Aqui só rodamos o mesmo encerramento do onStop: marca Realizada,
+  // enfileira BACKFILL_COMPILE_ATA apontando pro prefixo salvo e dispara o
+  // workflow que compila as partes e gera a ata. NÃO abre novo MediaRecorder,
+  // então não sobrepõe a gravação existente.
+  const recuperarGravacao = async ({ reuniaoId, bucket, prefix, sessionId } = {}) => {
+    if (!reuniaoId) throw new Error("Reunião inválida.");
+    if (isRecording && reuniaoIdRef.current === reuniaoId) {
+      throw new Error("Essa reunião está gravando agora — use ENCERRAR normal.");
+    }
+
+    const storageBucket = bucket || STORAGE_BUCKET;
+    const storagePrefix =
+      prefix ||
+      (sessionId ? `reunioes/${reuniaoId}/${sessionId}/` : `reunioes/${reuniaoId}/`);
+
+    setIsProcessing(true);
+    try {
+      // 1) marca a reunião como Realizada / PROCESSANDO
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from("reunioes")
+          .update({
+            status: "Realizada",
+            gravacao_status: "PROCESSANDO",
+            gravacao_fim: nowIso(),
+            horario_fim: nowIso(),
+            updated_at: nowIso(),
+          })
+          .eq("id", reuniaoId);
+        if (error) throw error;
+      });
+
+      // 2) enfileira BACKFILL_COMPILE_ATA (sem duplicar) com o prefixo salvo
+      await withRetry(async () => {
+        const { data: existing, error: e1 } = await supabase
+          .from("reuniao_processing_queue")
+          .select("id,status")
+          .eq("reuniao_id", reuniaoId)
+          .in("status", ["PENDENTE", "PROCESSANDO", "PROCESSANDO_GITH"])
+          .limit(1);
+        if (e1) throw e1;
+
+        if (!existing || existing.length === 0) {
+          const { error: e2 } = await supabase.from("reuniao_processing_queue").insert([
+            {
+              reuniao_id: reuniaoId,
+              job_type: "BACKFILL_COMPILE_ATA",
+              status: "PENDENTE",
+              attempts: 0,
+              next_run_at: nowIso(),
+              storage_bucket: storageBucket,
+              storage_prefix: storagePrefix,
+              result: {},
+            },
+          ]);
+          if (e2) throw e2;
+        }
+      });
+
+      // 3) dispara o workflow que compila as partes e gera a ata
+      addLog("✅ Recuperação: encerrando gravação salva e disparando processamento...");
+      await withRetry(() => dispatchProcessarVideoWorkflow(), { retries: 3, baseDelayMs: 800 });
+      addLog("🎉 Recuperação disparada! A ata vai ser gerada da gravação já salva.");
+      return true;
+    } catch (e) {
+      addLog(`❌ Recuperação falhou: ${e?.message || e}`);
+      throw e;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // ✅ Watchdog: tenta curar perda de áudio sem abortar
   useEffect(() => {
     const t = setInterval(() => {
@@ -875,6 +949,7 @@ export function RecordingProvider({ children }) {
       current,
       startRecording,
       stopRecording,
+      recuperarGravacao,
     }),
     [isRecording, isProcessing, timer, current]
   );

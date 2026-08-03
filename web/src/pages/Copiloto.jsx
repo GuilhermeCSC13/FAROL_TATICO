@@ -154,8 +154,15 @@ function safeArray(v) {
 ========================= */
 export default function Copiloto() {
   const navigate = useNavigate();
-  const { isRecording, isProcessing, timer, startRecording, stopRecording, current } =
-    useRecording();
+  const {
+    isRecording,
+    isProcessing,
+    timer,
+    startRecording,
+    stopRecording,
+    recuperarGravacao,
+    current,
+  } = useRecording();
 
   const [dataFiltro, setDataFiltro] = useState(
     new Date().toISOString().split("T")[0]
@@ -588,6 +595,38 @@ export default function Copiloto() {
     } catch (e) {
       console.error("stopRecording (Copiloto):", e);
       alert("Erro ao encerrar a gravação.");
+    }
+  };
+
+  // Reunião presa em GRAVANDO cuja sessão caiu (foi pro login): as partes já
+  // estão salvas, mas nunca encerrou. Este botão encerra e gera a ata SEM
+  // regravar (não sobrepõe a gravação existente).
+  const gravacaoTravada =
+    !!selecionada?.id &&
+    String(selecionada?.gravacao_status || "").toUpperCase() === "GRAVANDO" &&
+    !(isRecording && current?.reuniaoId === selecionada.id);
+
+  const onRecuperar = async () => {
+    if (!selecionada?.id) return;
+    const ok = window.confirm(
+      `Encerrar e gerar a ata de "${selecionada.titulo}" a partir da gravação que já está salva?\n\n` +
+        "Não regrava — só compila o que já foi gravado antes de cair."
+    );
+    if (!ok) return;
+    try {
+      await recuperarGravacao({
+        reuniaoId: selecionada.id,
+        bucket: selecionada.gravacao_bucket,
+        prefix: selecionada.gravacao_prefix,
+        sessionId: selecionada.gravacao_session_id,
+      });
+      await fetchReunioes();
+      alert(
+        "Encerramento disparado. A ata vai aparecer no Banco de Atas em alguns minutos."
+      );
+    } catch (e) {
+      console.error("recuperarGravacao (Copiloto):", e);
+      alert("Erro ao recuperar a gravação: " + (e?.message || e));
     }
   };
 
@@ -1075,6 +1114,15 @@ export default function Copiloto() {
                 type="button"
               >
                 ENCERRAR
+              </button>
+            ) : gravacaoTravada ? (
+              <button
+                onClick={onRecuperar}
+                className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-black text-xs hover:bg-amber-400 transition-all shadow-sm"
+                title="A gravação caiu mas está salva. Clique para encerrar e gerar a ata sem regravar."
+                type="button"
+              >
+                ENCERRAR (RECUPERAR ATA)
               </button>
             ) : (
               <button
