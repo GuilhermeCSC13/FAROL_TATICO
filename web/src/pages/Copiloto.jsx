@@ -598,12 +598,17 @@ export default function Copiloto() {
     }
   };
 
-  // Reunião presa em GRAVANDO cuja sessão caiu (foi pro login): as partes já
-  // estão salvas, mas nunca encerrou. Este botão encerra e gera a ata SEM
-  // regravar (não sobrepõe a gravação existente).
+  // Reunião GENUINAMENTE caída (a sessão caiu antes de encerrar): fica presa em
+  // GRAVANDO E com status "Em Andamento" (nunca chegou a "Realizada"). As partes
+  // já estão salvas, mas nunca finalizou. Só nesse caso mostramos o botão de
+  // recuperação. Uma reunião encerrada normal vira "Realizada" (mesmo que o
+  // gravacao_status leve um instante pra virar PROCESSANDO), e enquanto finaliza
+  // isProcessing cobre — assim o botão de recuperar NÃO aparece após o ENCERRAR.
   const gravacaoTravada =
     !!selecionada?.id &&
     String(selecionada?.gravacao_status || "").toUpperCase() === "GRAVANDO" &&
+    String(selecionada?.status || "").trim().toLowerCase() !== "realizada" &&
+    !isProcessing &&
     !(isRecording && current?.reuniaoId === selecionada.id);
 
   const onRecuperar = async () => {
