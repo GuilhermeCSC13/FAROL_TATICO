@@ -347,6 +347,20 @@ function formatAtaMarkdown(raw, { titulo, dataBR } = {}) {
   return ensureSpacing(t);
 }
 
+// gravacao_inicio/fim são gravados como wall-clock LOCAL sem offset (nowIso do
+// RecordingContext), mas ficam numa coluna timestamptz → voltam rotulados como
+// UTC (+00:00). Se formatar com toLocaleTimeString normal, o navegador converte
+// pra BRT e tira 3h (mostrava 08:34 no lugar de 11:34). Formatando SEM converter
+// fuso (timeZone UTC) exibimos a hora/data REAL que foi gravada.
+function fmtHoraGravacao(v) {
+  if (!v) return "--:--";
+  return new Date(v).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+}
+function fmtDataGravacao(v) {
+  if (!v) return "—";
+  return new Date(v).toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
 // ✅ HELPERS (NOVO): Agrupamento sidebar
 function toBRDayKey(dateStr) {
   if (!dateStr) return "Sem data";
@@ -834,16 +848,12 @@ Estrutura obrigatória:
 
       const titulo = selectedAta.titulo || "Ata da Reunião";
       const dataBR = selectedAta.gravacao_inicio
-        ? new Date(selectedAta.gravacao_inicio).toLocaleDateString("pt-BR")
+        ? fmtDataGravacao(selectedAta.gravacao_inicio)
         : selectedAta.data_hora
           ? new Date(selectedAta.data_hora).toLocaleDateString("pt-BR")
           : "";
-      const horaIni = selectedAta.gravacao_inicio
-        ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : "--:--";
-      const horaFim = selectedAta.gravacao_fim
-        ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : "--:--";
+      const horaIni = fmtHoraGravacao(selectedAta.gravacao_inicio);
+      const horaFim = fmtHoraGravacao(selectedAta.gravacao_fim);
       const duracao = selectedAta.gravacao_inicio && selectedAta.gravacao_fim
         ? calculateRealDuration(selectedAta.gravacao_inicio, selectedAta.gravacao_fim)
         : "";
@@ -1511,13 +1521,13 @@ Estrutura obrigatória:
                       <div className="flex items-center gap-4">
                         <span className="flex items-center gap-1.5">
                           <Calendar size={16} className="text-slate-400" />{" "}
-                          {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleDateString() : "Data N/A"}
+                          {selectedAta.gravacao_inicio ? fmtDataGravacao(selectedAta.gravacao_inicio) : "Data N/A"}
                         </span>
                         <span className="flex items-center gap-1.5 text-slate-700 font-medium">
                           <Clock size={16} className="text-slate-400" />
-                          {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}{" "}
+                          {fmtHoraGravacao(selectedAta.gravacao_inicio)}{" "}
                           {" - "}
-                          {selectedAta.gravacao_fim ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                          {fmtHoraGravacao(selectedAta.gravacao_fim)}
                         </span>
                       </div>
 
@@ -1833,14 +1843,14 @@ Estrutura obrigatória:
                           <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-600">
                             <span className="flex items-center gap-1.5">
                               <Calendar size={16} className="text-slate-400" />
-                              {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleDateString("pt-BR") : "—"}
+                              {selectedAta.gravacao_inicio ? fmtDataGravacao(selectedAta.gravacao_inicio) : "—"}
                             </span>
 
                             <span className="flex items-center gap-1.5">
                               <Clock size={16} className="text-slate-400" />
-                              {selectedAta.gravacao_inicio ? new Date(selectedAta.gravacao_inicio).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}{" "}
+                              {fmtHoraGravacao(selectedAta.gravacao_inicio)}{" "}
                               -{" "}
-                              {selectedAta.gravacao_fim ? new Date(selectedAta.gravacao_fim).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+                              {fmtHoraGravacao(selectedAta.gravacao_fim)}
                             </span>
                           </div>
 
