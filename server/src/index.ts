@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import multer from "multer";
+import { VertexAI } from "@google-cloud/vertexai";
 
 dotenv.config();
 
@@ -21,16 +22,26 @@ app.use(express.json());
 app.use(morgan("dev"));
 
 // ======================================================================
-// CONFIG IA
-// Esta rota nao guarda chave: ela fala com a Edge Function `gemini-proxy` do
-// Supabase, que e o unico lugar onde a OPENROUTER_API_KEY existe.
+// CONFIG GEMINI (Vertex AI)
 // ======================================================================
-const IA_PROXY_URL =
-  process.env.IA_PROXY_URL?.trim() ||
-  "https://zgmxylsmbremaprebifq.supabase.co/functions/v1/gemini-proxy";
-const IA_MODELO = process.env.IA_MODELO?.trim() || "google/gemini-2.5-pro";
+const PROJECT_ID = process.env.PROJECT_ID;
+const LOCATION = process.env.LOCATION || "us-central1";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro";
 
-console.log(`IA via proxy: ${IA_PROXY_URL} (${IA_MODELO}).`);
+let vertexAI: VertexAI | null = null;
+
+if (PROJECT_ID) {
+  vertexAI = new VertexAI({
+    project: PROJECT_ID,
+    location: LOCATION,
+  });
+
+  console.log("Vertex AI configurado.");
+} else {
+  console.warn(
+    "PROJECT_ID não definido. Rotas de Gemini ficarão desabilitadas."
+  );
+}
 
 // ======================================================================
 // UPLOAD DE ÁUDIO EM MEMÓRIA
@@ -61,9 +72,10 @@ app.post(
   "/api/reunioes/:id/transcrever",
   upload.single("audio"),
   async (req: Request, res: Response) => {
-    if (!IA_PROXY_URL) {
+    if (!vertexAI) {
       return res.status(500).json({
-        error: "IA não configurada. Defina IA_PROXY_URL nas variáveis de ambiente.",
+        error:
+          "Vertex AI não configurado. Defina PROJECT_ID, LOCATION e GEMINI_MODEL nas variáveis de ambiente.",
       });
     }
 
@@ -76,47 +88,36 @@ app.post(
     try {
       const base64Audio = req.file.buffer.toString("base64");
 
+      const model = vertexAI.getGenerativeModel({
+        model: GEMINI_MODEL,
+      });
+
       const promptJson =
         "Você é um assistente que transcreve reuniões em português do Brasil e gera um resumo estruturado. " +
         "Retorne SOMENTE um JSON no formato: " +
         `{\"transcricao\":\"...\",\"resumo\":{\"decisoes\":[\"...\"],\"pendencias\":[\"...\"],\"responsaveis\":[\"...\"],\"prazos\":[\"...\"]}}`;
 
-      const mime = req.file.mimetype || "audio/wav";
-
-      // Áudio vai inline (base64) porque aqui só temos o buffer do upload, não
-      // uma URL. Arquivo grande estoura o corpo da Edge Function — se um dia
-      // esta rota voltar a ser usada de verdade, o caminho é subir pro Storage
-      // e mandar `mediaUrl`, como a Central de Atas faz.
-      const proxyResp = await fetch(IA_PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: IA_MODELO,
-          prompt: [
-            promptJson,
-            { inlineData: { mimeType: mime, data: base64Audio } },
-          ],
-        }),
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                inlineData: {
+                  data: base64Audio,
+                  mimeType: req.file.mimetype || "audio/wav",
+                },
+              },
+              { text: promptJson },
+            ],
+          },
+        ],
       });
 
-      if (!proxyResp.ok) {
-        const detalhe = await proxyResp.text().catch(() => "");
-        throw new Error(`proxy ${proxyResp.status}: ${detalhe.slice(0, 400)}`);
-      }
-
-      const bruto: any = await proxyResp.json();
-      if (!bruto?.ok) {
-        throw new Error(bruto?.error || "resposta inválida do proxy");
-      }
-
-      const uso = bruto?.raw?.usage ?? {};
-      console.log(
-        `[ia] ${IA_MODELO} tokens=${uso.prompt_tokens ?? "?"}/${
-          uso.completion_tokens ?? "?"
-        } custo=${uso.cost ?? "?"}`
-      );
-
-      const text: string = bruto?.text || "";
+      const text =
+        (result.response as any)?.candidates?.[0]?.content?.parts
+          ?.map((p: any) => p.text || "")
+          .join("") || "";
 
       let payload: any;
 
@@ -134,7 +135,7 @@ app.post(
       console.error("Erro ao processar áudio:", error);
 
       res.status(500).json({
-        error: "Erro ao processar áudio com a IA",
+        error: "Erro ao processar áudio com Gemini",
         detail: error?.message,
       });
     }

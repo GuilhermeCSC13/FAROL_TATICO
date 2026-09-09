@@ -1,20 +1,10 @@
-// Wrapper compativel com a interface do @google/generative-ai, mas que vai
-// pela Edge Function `gemini-proxy` no Supabase — que desde a migração fala
-// com o OPENROUTER, nao mais com a Gemini API direta. A chave
-// (OPENROUTER_API_KEY) fica como secret no Supabase, nunca chega no bundle.
-//
-// O modelo continua sendo o mesmo (Gemini 2.5 Pro), so que pelo slug do
-// OpenRouter: "google/gemini-2.5-pro". Trocar de modelo aqui e so trocar essa
-// string por outro slug do catalogo (https://openrouter.ai/models).
-//
-// O nome dos exports e do arquivo e historico — mantido para nao mexer nas
-// tres telas que ja chamam isso.
+// Wrapper compativel com a interface do @google/generative-ai mas que vai
+// pela Edge Function `gemini-proxy` no Supabase. A chave da Gemini API
+// fica como secret no Supabase (GEMINI_API_KEY), nunca chega no bundle.
 
 import { supabase } from "../supabaseClient";
 
-const MODELO_PADRAO = "google/gemini-2.5-pro";
-
-async function callProxy(prompt, { model = MODELO_PADRAO } = {}) {
+async function callProxy(prompt, { model = "gemini-2.5-pro" } = {}) {
   const { data, error } = await supabase.functions.invoke("gemini-proxy", {
     body: { model, prompt },
   });
@@ -41,5 +31,5 @@ function buildModel(modelName) {
   };
 }
 
-export const getGeminiFlash = () => buildModel(MODELO_PADRAO);
+export const getGeminiFlash = () => buildModel("gemini-2.5-pro");
 export const getGeminiModel = (modelName) => buildModel(modelName);
