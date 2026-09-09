@@ -1,28 +1,50 @@
 // supabase/functions/gemini-proxy/index.ts
 //
-// Proxy server-side para a Gemini API. Mantem a chave (GEMINI_API_KEY)
-// fora do bundle do frontend. Aceita o mesmo formato que o JS SDK gera
-// internamente, ou um `prompt` simples (string).
+// ⚠️ O nome da função é histórico: desde a migração ela NÃO fala mais com a
+// Gemini API do Google — fala com o OPENROUTER. Trocamos para ter o custo de
+// cada chamada visível no painel do OpenRouter (usage.cost vem em toda
+// resposta) em vez de depender do billing export do Google Cloud.
 //
-// Body JSON:
+// A chave (OPENROUTER_API_KEY) fica como secret e nunca chega no bundle.
+//
+// Contrato de ENTRADA — inalterado. O web/src/services/gemini.js continua
+// mandando exatamente o mesmo corpo de antes:
 //   {
-//     model?: string,                 // default: gemini-2.5-pro
-//     prompt?: string,                // atalho — vira contents = [{role:user, parts:[{text}]}]
-//     contents?: GenerativeContent[], // formato cru da REST API do Google
-//     generationConfig?: object,
-//     systemInstruction?: object | string
+//     model?: string,          // slug OpenRouter; sem "/" recebe "google/"
+//     prompt?: string | Array<string | {inlineData} | {mediaUrl, mimeType}>,
+//     messages?: ChatMessage[],// formato OpenAI cru, se algum dia precisar
+//     systemInstruction?: string | { parts: [{ text }] },
+//     generationConfig?: { temperature?, maxOutputTokens?, topP? }
 //   }
 //
-// Resposta:
-//   { ok: true, text: string, raw: <resposta crua do Google> }
+// Contrato de SAÍDA — inalterado:
+//   { ok: true, text: string, raw: <resposta crua do OpenRouter> }
 //
-// Secret necessario:
-//   GEMINI_API_KEY  -> chave criada em https://aistudio.google.com/apikey
+// A diferença que importa: o OpenRouter NÃO aceita áudio por URL, só base64
+// inline. O que antes subia pelo Files API do Gemini (até 2GB) agora é baixado
+// aqui e convertido — por isso existe o teto MAX_MEDIA_MB. Estourar o teto
+// devolve erro explicando o tamanho, em vez de derrubar a função por memória.
+//
+// Secrets:
+//   OPENROUTER_API_KEY    -> chave criada em https://openrouter.ai/keys
+//   OPENROUTER_MODEL      -> opcional, default google/gemini-2.5-pro
+//   MAX_MEDIA_MB          -> opcional, default 45
+//   OPENROUTER_APP_URL    -> opcional, aparece no ranking/painel do OpenRouter
+//   OPENROUTER_APP_TITLE  -> opcional, nome do app no painel do OpenRouter
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
-const API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const DEFAULT_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-pro";
+const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+
+const API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+// `||` e não `??`: um secret que existe mas está VAZIO vira "" e o `??` deixaria passar.
+const DEFAULT_MODEL = Deno.env.get("OPENROUTER_MODEL")?.trim() || "google/gemini-2.5-pro";
+const MAX_MEDIA_MB = Number(Deno.env.get("MAX_MEDIA_MB") ?? "45");
+const APP_URL = Deno.env.get("OPENROUTER_APP_URL") ?? "https://faroldemetas.onrender.com";
+const APP_TITLE = Deno.env.get("OPENROUTER_APP_TITLE") ?? "Farol Tatico";
+
+const MAX_MEDIA_BYTES = Math.max(1, MAX_MEDIA_MB) * 1024 * 1024;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -37,22 +59,173 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function extractText(raw: any): string {
-  try {
-    const parts = raw?.candidates?.[0]?.content?.parts ?? [];
-    return parts
+// Erro operacional que o usuário precisa LER (arquivo grande demais, provider
+// fora do ar...). Vai como HTTP 200 de propósito: o supabase.functions.invoke
+// descarta o corpo da resposta quando o status não é 2xx, e aí a tela mostraria
+// só "non-2xx status code" em vez do motivo. O gemini.js já trata `ok: false`.
+function falha(msg: string, extra?: Record<string, unknown>) {
+  console.error(`[openrouter] ${msg}`);
+  return json({ ok: false, error: msg, ...(extra || {}) });
+}
+
+function mb(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// O cliente antigo manda "gemini-2.5-pro"; o OpenRouter quer "google/gemini-2.5-pro".
+// Normaliza para não quebrar caso algum bundle velho ainda esteja em cache.
+function normalizeModel(raw: unknown): string {
+  const m = String(raw || "").trim().replace(/^models\//, "");
+  if (!m) return DEFAULT_MODEL;
+  return m.includes("/") ? m : `google/${m}`;
+}
+
+// O OpenRouter espera um token de formato, não o mime completo.
+// Lista aceita: wav, mp3, aiff, aac, ogg, flac, m4a, pcm16, pcm24.
+function audioFormatFromMime(mime: string): string {
+  const m = mime.toLowerCase().split(";")[0].trim();
+  const tabela: Record<string, string> = {
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/x-wav": "wav",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/mp4": "m4a",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/aac": "aac",
+    "audio/ogg": "ogg",
+    "audio/opus": "ogg",
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+    "audio/aiff": "aiff",
+    "audio/x-aiff": "aiff",
+  };
+  if (tabela[m]) return tabela[m];
+  // Fallback: usa o subtipo cru (ex.: audio/webm -> webm). Se o provider não
+  // aceitar, o erro dele é mais útil do que um formato inventado por nós.
+  return m.split("/")[1]?.replace(/^x-/, "") || "mp3";
+}
+
+// Monta a content part do OpenAI/OpenRouter a partir de bytes já em base64.
+function buildMediaPart(mime: string, base64: string, filename?: string) {
+  const tipo = mime.toLowerCase().split(";")[0].trim();
+  const dataUri = `data:${tipo};base64,${base64}`;
+
+  if (tipo.startsWith("audio/")) {
+    // Único caso que NÃO usa data URI: o OpenRouter quer o base64 cru + format.
+    return { type: "input_audio", input_audio: { data: base64, format: audioFormatFromMime(tipo) } };
+  }
+  if (tipo.startsWith("video/")) {
+    return { type: "video_url", video_url: { url: dataUri } };
+  }
+  if (tipo.startsWith("image/")) {
+    return { type: "image_url", image_url: { url: dataUri } };
+  }
+  if (tipo === "application/pdf") {
+    return { type: "file", file: { filename: filename || "arquivo.pdf", file_data: dataUri } };
+  }
+  throw new Error(`Tipo de mídia não suportado pelo proxy: ${tipo}`);
+}
+
+// Baixa a mídia e devolve em base64. Recusa cedo se já vier grande demais,
+// para não estourar os 256MB de memória da Edge Function.
+async function baixarComoBase64(mediaUrl: string, mimeHint: string) {
+  const r = await fetch(mediaUrl);
+  if (!r.ok) throw new Error(`Falha ao baixar mediaUrl (HTTP ${r.status})`);
+
+  const declarado = Number(r.headers.get("content-length") || "0");
+  if (declarado > MAX_MEDIA_BYTES) {
+    throw new Error(
+      `Arquivo de ${mb(declarado)} excede o limite de ${MAX_MEDIA_MB} MB do proxy. ` +
+        `O OpenRouter exige áudio/vídeo em base64 inline, então o arquivo passa inteiro ` +
+        `pela memória da Edge Function. Use a faixa de áudio (não o vídeo) ou aumente MAX_MEDIA_MB.`,
+    );
+  }
+
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  if (bytes.byteLength > MAX_MEDIA_BYTES) {
+    throw new Error(
+      `Arquivo de ${mb(bytes.byteLength)} excede o limite de ${MAX_MEDIA_MB} MB do proxy. ` +
+        `Use a faixa de áudio (não o vídeo) ou aumente MAX_MEDIA_MB.`,
+    );
+  }
+
+  const mime = mimeHint || r.headers.get("content-type") || "application/octet-stream";
+  console.log(`[openrouter] midia baixada: ${mb(bytes.byteLength)} (${mime})`);
+  return { base64: encodeBase64(bytes), mime };
+}
+
+// Converte o `prompt` do cliente (string ou array misto) nas content parts do
+// OpenRouter. Mantém a ordem em que o chamador montou.
+async function montarParts(prompt: unknown) {
+  const itens = Array.isArray(prompt) ? prompt : [prompt];
+  const parts: unknown[] = [];
+
+  for (const p of itens) {
+    if (typeof p === "string") {
+      if (p) parts.push({ type: "text", text: p });
+      continue;
+    }
+    if (!p || typeof p !== "object") continue;
+
+    const item = p as Record<string, any>;
+
+    if (typeof item.text === "string") {
+      parts.push({ type: "text", text: item.text });
+      continue;
+    }
+    if (item.inlineData?.data) {
+      parts.push(
+        buildMediaPart(
+          String(item.inlineData.mimeType || "application/octet-stream"),
+          String(item.inlineData.data),
+          item.filename,
+        ),
+      );
+      continue;
+    }
+    if (item.mediaUrl && item.mimeType) {
+      const { base64, mime } = await baixarComoBase64(String(item.mediaUrl), String(item.mimeType));
+      parts.push(buildMediaPart(mime, base64, item.filename));
+      continue;
+    }
+    throw new Error(`Item de prompt não reconhecido: ${JSON.stringify(Object.keys(item))}`);
+  }
+
+  if (!parts.length) throw new Error("prompt vazio");
+  return parts;
+}
+
+function textoDoSystem(systemInstruction: unknown): string {
+  if (!systemInstruction) return "";
+  if (typeof systemInstruction === "string") return systemInstruction;
+  const si = systemInstruction as Record<string, any>;
+  const parts = si?.parts;
+  if (Array.isArray(parts)) {
+    return parts.map((p: any) => (typeof p?.text === "string" ? p.text : "")).join("").trim();
+  }
+  return "";
+}
+
+// A resposta do OpenRouter segue o schema da OpenAI, mas `content` pode vir
+// como string ou como array de parts dependendo do provider por trás.
+function extrairTexto(raw: any): string {
+  const content = raw?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
       .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
       .join("")
       .trim();
-  } catch {
-    return "";
   }
+  return "";
 }
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "use POST" }, 405);
-  if (!API_KEY) return json({ error: "GEMINI_API_KEY ausente" }, 500);
+  if (!API_KEY) return json({ error: "OPENROUTER_API_KEY ausente" }, 500);
 
   let body: any = {};
   try {
@@ -61,95 +234,67 @@ serve(async (req: Request) => {
     return json({ error: "body invalido" }, 400);
   }
 
-  const model = String(body?.model || DEFAULT_MODEL);
+  const model = normalizeModel(body?.model);
 
-  // Upload de arquivo grande via Files API (ate 2GB). Usado quando o caller
-  // manda `{ mediaUrl, mimeType }` em vez de inlineData (que estoura o
-  // limite de body das Edge Functions com audios/videos longos).
-  async function uploadFromUrl(mediaUrl: string, mimeType: string) {
-    const r = await fetch(mediaUrl);
-    if (!r.ok) throw new Error(`Falha ao baixar mediaUrl (${r.status})`);
-    const bytes = await r.arrayBuffer();
-    const up = await fetch(
-      `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": mimeType, "X-Goog-Upload-Protocol": "raw" },
-        body: bytes,
-      },
-    );
-    if (!up.ok) throw new Error(`Files API ${up.status}: ${await up.text()}`);
-    const data = await up.json();
-    const uri = data?.file?.uri;
-    if (!uri) throw new Error("Files API nao retornou uri");
-    return uri as string;
-  }
-
-  // Aceita atalho `prompt: string` ou `contents` direto da REST API.
-  let contents = body?.contents;
-  if (!Array.isArray(contents)) {
-    if (typeof body?.prompt === "string") {
-      const parts: any[] = [{ text: body.prompt }];
-      if (body?.mediaUrl && body?.mimeType) {
-        try {
-          const uri = await uploadFromUrl(String(body.mediaUrl), String(body.mimeType));
-          parts.push({ file_data: { file_uri: uri, mime_type: String(body.mimeType) } });
-        } catch (e) {
-          return json({ error: String((e as Error)?.message || e) }, 502);
-        }
-      }
-      contents = [{ role: "user", parts }];
-    } else if (Array.isArray(body?.prompt)) {
-      // formato do SDK: array misto de string, { inlineData } e { mediaUrl, mimeType }
-      const parts: any[] = [];
-      for (const p of body.prompt) {
-        if (typeof p === "string") {
-          parts.push({ text: p });
-        } else if (p?.mediaUrl && p?.mimeType) {
-          try {
-            const uri = await uploadFromUrl(String(p.mediaUrl), String(p.mimeType));
-            parts.push({ file_data: { file_uri: uri, mime_type: String(p.mimeType) } });
-          } catch (e) {
-            return json({ error: String((e as Error)?.message || e) }, 502);
-          }
-        } else if (p?.inlineData) {
-          parts.push({
-            inline_data: {
-              mime_type: p.inlineData.mimeType,
-              data: p.inlineData.data,
-            },
-          });
-        } else {
-          parts.push(p);
-        }
-      }
-      contents = [{ role: "user", parts }];
-    } else {
-      return json({ error: "envie `prompt` ou `contents`" }, 400);
+  // Aceita `messages` (formato OpenAI cru) ou o `prompt` que o app já manda.
+  let messages: unknown[];
+  if (Array.isArray(body?.messages)) {
+    messages = body.messages;
+  } else {
+    let parts: unknown[];
+    try {
+      parts = await montarParts(body?.prompt);
+    } catch (e) {
+      return falha(String((e as Error)?.message || e));
     }
+
+    messages = [];
+    const system = textoDoSystem(body?.systemInstruction);
+    if (system) messages.push({ role: "system", content: system });
+
+    // Um único texto vai como string simples — é o formato que todo provider
+    // aceita sem ressalva. Só multimodal precisa do array de parts.
+    const soTexto = parts.length === 1 && (parts[0] as any)?.type === "text";
+    messages.push({ role: "user", content: soTexto ? (parts[0] as any).text : parts });
   }
 
-  const payload: Record<string, unknown> = { contents };
-  if (body?.generationConfig) payload.generationConfig = body.generationConfig;
-  if (body?.systemInstruction) {
-    payload.systemInstruction =
-      typeof body.systemInstruction === "string"
-        ? { role: "system", parts: [{ text: body.systemInstruction }] }
-        : body.systemInstruction;
-  }
+  const payload: Record<string, unknown> = { model, messages };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model,
-  )}:generateContent?key=${API_KEY}`;
+  const cfg = body?.generationConfig ?? {};
+  if (cfg.temperature != null) payload.temperature = cfg.temperature;
+  if (cfg.topP != null) payload.top_p = cfg.topP;
+  const maxTokens = cfg.maxOutputTokens ?? cfg.max_tokens;
+  if (maxTokens != null) payload.max_tokens = maxTokens;
 
-  const r = await fetch(url, {
+  const r = await fetch(ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+      // Identificam o app no painel do OpenRouter — é o que permite separar
+      // o gasto do Farol de qualquer outra coisa na mesma conta.
+      "HTTP-Referer": APP_URL,
+      "X-OpenRouter-Title": APP_TITLE,
+    },
     body: JSON.stringify(payload),
   });
+
   if (!r.ok) {
-    return json({ error: `Gemini ${r.status}: ${await r.text()}` }, r.status);
+    return falha(`OpenRouter ${r.status}: ${await r.text().catch(() => "")}`);
   }
+
   const raw = await r.json();
-  return json({ ok: true, text: extractText(raw), raw });
+
+  // O OpenRouter pode devolver 200 com erro no corpo (ex.: provider caiu).
+  if (raw?.error) {
+    return falha(String(raw.error?.message || JSON.stringify(raw.error)), { raw });
+  }
+
+  const u = raw?.usage ?? {};
+  console.log(
+    `[openrouter] model=${model} tokens=${u.prompt_tokens ?? "?"}/${u.completion_tokens ?? "?"} ` +
+      `custo=${u.cost ?? "?"} id=${raw?.id ?? "?"}`,
+  );
+
+  return json({ ok: true, text: extrairTexto(raw), raw });
 });
