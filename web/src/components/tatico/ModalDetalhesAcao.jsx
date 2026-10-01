@@ -17,6 +17,7 @@ import {
   Minimize2,
 } from "lucide-react";
 import { supabase, supabaseInove } from "../../supabaseClient";
+import { ehHtml, abrirHtmlSeguro } from "../../utils/abrirHtml";
 
 /* =========================
    Helpers
@@ -53,6 +54,7 @@ function fileKindFromFile(file) {
   if (n.endsWith(".doc") || n.endsWith(".docx")) return "doc";
   if (n.endsWith(".xls") || n.endsWith(".xlsx")) return "xls";
   if (n.endsWith(".ppt") || n.endsWith(".pptx")) return "ppt";
+  if (t === "text/html" || ehHtml(n)) return "html";
   return "file";
 }
 
@@ -64,6 +66,7 @@ function fileKindFromUrl(url) {
   if (u.match(/\.(doc|docx)$/)) return "doc";
   if (u.match(/\.(xls|xlsx)$/)) return "xls";
   if (u.match(/\.(ppt|pptx)$/)) return "ppt";
+  if (ehHtml(u)) return "html";
   return "file";
 }
 
@@ -72,6 +75,7 @@ function fileKindFromUrl(url) {
 ========================= */
 function IconForKind({ kind }) {
   if (kind === "pdf") return <FileText size={16} className="text-red-600" />;
+  if (kind === "html") return <FileText size={16} className="text-orange-500" />;
   return <FileIcon size={16} className="text-slate-500" />;
 }
 
@@ -103,6 +107,21 @@ function MiniaturaUrl({ url }) {
       >
         <span className="text-[10px] font-bold text-slate-600">VÍDEO</span>
       </a>
+    );
+  }
+
+  // .html: o storage entrega como texto; abre renderizado numa aba isolada (utils/abrirHtml)
+  if (kind === "html") {
+    return (
+      <button
+        type="button"
+        onClick={() => abrirHtmlSeguro(url)}
+        className="flex items-center justify-center gap-2 w-28 h-12 rounded-lg border border-slate-200 bg-white hover:shadow px-2"
+        title="Abrir página HTML"
+      >
+        <IconForKind kind={kind} />
+        <span className="text-[10px] font-semibold text-slate-600 truncate">HTML</span>
+      </button>
     );
   }
 
@@ -384,16 +403,20 @@ const ModalDetalhesAcao = ({
   // ---------------------------------------------------------------------------
   const uploadArquivos = async (files) => {
     const urls = [];
+    const falhas = [];
     for (const file of files) {
       const fileName = `acao-${acao.id}-${Date.now()}-${sanitizeFileName(file.name)}`;
       const { error } = await supabase.storage.from("evidencias").upload(fileName, file);
       if (error) {
         console.error("Erro upload evidência:", error);
+        falhas.push(`${file.name}: ${error.message || error}`);
         continue;
       }
       const { data: urlData } = supabase.storage.from("evidencias").getPublicUrl(fileName);
       if (urlData?.publicUrl) urls.push(urlData.publicUrl);
     }
+    // antes a falha sumia em silêncio e o anexo simplesmente não aparecia
+    if (falhas.length) alert("Estes anexos não subiram:\n\n" + falhas.join("\n"));
     return urls;
   };
 
@@ -858,7 +881,7 @@ const ModalDetalhesAcao = ({
                       <input
                         type="file"
                         multiple
-                        accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                        accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm"
                         className="hidden"
                         onChange={(e) =>
                           setNovosArquivosAcao(Array.from(e.target.files || []))
@@ -974,7 +997,7 @@ const ModalDetalhesAcao = ({
                       <input
                         type="file"
                         multiple
-                        accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                        accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm"
                         className="hidden"
                         onChange={(e) =>
                           setNovosArquivosConclusao(Array.from(e.target.files || []))

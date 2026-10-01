@@ -4,6 +4,7 @@ import Layout from '../components/tatico/Layout';
 import { supabase } from '../supabaseClient';
 import { CheckCircle, ExternalLink, Search, Trash2, User, Calendar, Clock, AlertCircle, BarChart2, List } from 'lucide-react';
 import ModalDetalhesAcao from '../components/tatico/ModalDetalhesAcao';
+import { ehHtml, abrirHtmlSeguro } from '../utils/abrirHtml';
 
 // Normaliza um nome para deduplicar (case+espaço-insensível)
 const normNome = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -499,7 +500,7 @@ const GestaoAcoes = () => {
                               <span className="bg-gray-100 px-2 py-1 rounded border border-gray-200">{acao.tipo_reuniao || 'Geral'}</span>
                             </td>
                             <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                              {primeiraFoto ? <a href={primeiraFoto} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 flex justify-center" title="Ver Evidência"><ExternalLink size={16} /></a> : <span className="text-gray-300">-</span>}
+                              {primeiraFoto ? <a href={primeiraFoto} target="_blank" rel="noreferrer" onClick={(e) => { if (ehHtml(primeiraFoto)) { e.preventDefault(); e.stopPropagation(); abrirHtmlSeguro(primeiraFoto); } }} className="text-blue-600 hover:text-blue-800 flex justify-center" title="Ver Evidência"><ExternalLink size={16} /></a> : <span className="text-gray-300">-</span>}
                             </td>
                             <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                               {statusCalculado !== 'Concluída' && statusCalculado !== 'Excluída' && (
