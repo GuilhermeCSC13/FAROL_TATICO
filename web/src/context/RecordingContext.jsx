@@ -16,6 +16,7 @@ const SEGMENT_MS = 5 * 60 * 1000;
 const TIMESLICE_MS = 1000;
 
 // ✅ Blindagem (ajustáveis)
+const STOP_RECORDER_TIMEOUT_MS = 15000; // não trava o ENCERRAR se o MediaRecorder não responder
 const ROTATE_FLUSH_DELAY_MS = 200; // ajuda MUITO em corte de 5:01
 const AUDIO_HEALTH_CHECK_MS = 8000; // watchdog de áudio
 const MIN_PART_BYTES_WARN = 80_000; // alerta (não aborta)
@@ -34,6 +35,16 @@ function nowIso() {
   // Wall-clock local sem offset — consistente com o que o resto do app exibe
   // (extractTime literal) e com horario_inicio/data_hora vindos do formulário.
   const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// timestamptz real (ex.: created_at) -> mesmo formato wall-clock local do nowIso()
+function utcToLocalIso(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours()
@@ -189,6 +200,8 @@ export function RecordingProvider({ children }) {
 
   const stopFinalizePromiseRef = useRef(null);
   const finalizeRunningRef = useRef(false);
+  // horário real do ENCERRAR (não o de quando o upload/finalização termina)
+  const encerramentoRef = useRef(null);
 
   const healRunningRef = useRef(false);
   const lastHealAtRef = useRef(0);
@@ -627,20 +640,6 @@ export function RecordingProvider({ children }) {
       storagePrefix: `reunioes/${reuniaoId}/${sessionId}/`,
     });
 
-    await supabase
-      .from("reunioes")
-      .update({
-        status: "Em Andamento",
-        gravacao_status: "GRAVANDO",
-        gravacao_session_id: sessionId,
-        gravacao_bucket: STORAGE_BUCKET,
-        gravacao_prefix: `reunioes/${reuniaoId}/${sessionId}/`,
-        horario_inicio: nowIso(),
-        gravacao_inicio: nowIso(),
-        updated_at: nowIso(),
-      })
-      .eq("id", reuniaoId);
-
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
@@ -679,6 +678,24 @@ export function RecordingProvider({ children }) {
       // se parar o compartilhamento de tela, encerra
       displayStream.getVideoTracks()[0].onended = () => stopRecording();
 
+      // Só marca GRAVANDO depois que tela/mic foram liberados. Antes era gravado
+      // antes do getDisplayMedia: se a pessoa cancelava a permissão, a reunião
+      // ficava presa em GRAVANDO / "Em Andamento" sem nenhuma parte.
+      const inicioIso = nowIso();
+      await supabase
+        .from("reunioes")
+        .update({
+          status: "Em Andamento",
+          gravacao_status: "GRAVANDO",
+          gravacao_session_id: sessionId,
+          gravacao_bucket: STORAGE_BUCKET,
+          gravacao_prefix: `reunioes/${reuniaoId}/${sessionId}/`,
+          horario_inicio: inicioIso,
+          gravacao_inicio: inicioIso,
+          updated_at: inicioIso,
+        })
+        .eq("id", reuniaoId);
+
       startSegment(reuniaoId, sessionId);
 
       clearInterval(segmentIntervalRef.current);
@@ -692,6 +709,11 @@ export function RecordingProvider({ children }) {
     } catch (err) {
       addLog(`❌ Permissão negada: ${err?.message || err}`);
       setIsRecording(false);
+      // não deixa a reunião "presa" na memória da aba
+      cleanupMedia();
+      sessionIdRef.current = null;
+      reuniaoIdRef.current = null;
+      setCurrent(null);
     }
   };
 
@@ -701,17 +723,53 @@ export function RecordingProvider({ children }) {
 
     const stopPromise = createStopPromise();
 
+    // Registra o encerramento no banco NA HORA do clique. Antes isso só era
+    // gravado no fim da finalização (depois de subir todas as partes): se a aba
+    // fechava/caía nesse meio tempo, a reunião ficava "Em Andamento" e era
+    // preciso encerrar de novo — e o término virava o horário do 2º clique.
+    const reuniaoIdEncerrar = reuniaoIdRef.current;
+    const fimIso = nowIso();
+    const duracaoEncerrar = startTimeRef.current
+      ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+      : timer;
+    encerramentoRef.current = { fimIso, duracao: duracaoEncerrar };
+
     try {
       setIsRecording(false);
       stopTimerFn();
       clearInterval(segmentIntervalRef.current);
 
+      // aguardado: não pode chegar depois do PROCESSANDO da finalização
+      if (reuniaoIdEncerrar) {
+        try {
+          const { error } = await supabase
+            .from("reunioes")
+            .update({
+              status: "Realizada",
+              gravacao_status: "ENCERRANDO",
+              duracao_segundos: duracaoEncerrar,
+              horario_fim: fimIso,
+              gravacao_fim: fimIso,
+              updated_at: fimIso,
+            })
+            .eq("id", reuniaoIdEncerrar);
+          if (error) throw error;
+        } catch (e) {
+          addLog(`⚠️ Não registrou o encerramento: ${e?.message || e}`);
+        }
+      }
+
       const rec = recorderRef.current;
       if (rec && rec.state === "recording") {
         await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            addLog("⚠️ MediaRecorder não respondeu ao stop; seguindo com a finalização.");
+            resolve();
+          }, STOP_RECORDER_TIMEOUT_MS);
           const originalOnStop = rec.onstop;
           rec.onstop = async (e) => {
             if (originalOnStop) await originalOnStop(e);
+            clearTimeout(timeout);
             resolve();
           };
           try {
@@ -752,9 +810,10 @@ export function RecordingProvider({ children }) {
       await waitQueueDrain();
       await Promise.allSettled(Array.from(uploadsInFlightRef.current));
 
-      const duracao = startTimeRef.current
-        ? Math.floor((Date.now() - startTimeRef.current) / 1000)
-        : timer;
+      const fimIso = encerramentoRef.current?.fimIso || nowIso();
+      const duracao =
+        encerramentoRef.current?.duracao ??
+        (startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : timer);
 
       const firstPartPath = buildPartPath(reuniaoId, sessionId, 1);
 
@@ -765,8 +824,8 @@ export function RecordingProvider({ children }) {
           .update({
             status: "Realizada",
             duracao_segundos: duracao,
-            horario_fim: nowIso(),
-            gravacao_fim: nowIso(),
+            horario_fim: fimIso,
+            gravacao_fim: fimIso,
             gravacao_status: "PROCESSANDO",
             gravacao_path: firstPartPath,
             gravacao_bucket: STORAGE_BUCKET,
@@ -810,6 +869,7 @@ export function RecordingProvider({ children }) {
       cleanupMedia();
 
       sessionIdRef.current = null;
+      encerramentoRef.current = null;
       reuniaoIdRef.current = null;
       partNumberRef.current = 0;
 
@@ -840,6 +900,31 @@ export function RecordingProvider({ children }) {
 
     setIsProcessing(true);
     try {
+      // Término = quando a gravação parou de fato, não a hora deste clique
+      // (recuperar horas depois deixava a reunião com 8h+ de duração).
+      // Se o ENCERRAR já tinha registrado o horário (ENCERRANDO), mantém.
+      const { data: atual } = await supabase
+        .from("reunioes")
+        .select("gravacao_status, horario_fim")
+        .eq("id", reuniaoId)
+        .maybeSingle();
+
+      let fimIso = null;
+      if (atual?.gravacao_status === "ENCERRANDO" && atual?.horario_fim) {
+        fimIso = String(atual.horario_fim).slice(0, 19);
+      } else {
+        let q = supabase
+          .from("reuniao_gravacao_partes")
+          .select("created_at")
+          .eq("reuniao_id", reuniaoId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (sessionId) q = q.eq("session_id", sessionId);
+        const { data: ultimaParte } = await q.maybeSingle();
+        if (ultimaParte?.created_at) fimIso = utcToLocalIso(ultimaParte.created_at);
+      }
+      fimIso = fimIso || nowIso();
+
       // 1) marca a reunião como Realizada / PROCESSANDO
       await withRetry(async () => {
         const { error } = await supabase
@@ -847,8 +932,8 @@ export function RecordingProvider({ children }) {
           .update({
             status: "Realizada",
             gravacao_status: "PROCESSANDO",
-            gravacao_fim: nowIso(),
-            horario_fim: nowIso(),
+            gravacao_fim: fimIso,
+            horario_fim: fimIso,
             updated_at: nowIso(),
           })
           .eq("id", reuniaoId);

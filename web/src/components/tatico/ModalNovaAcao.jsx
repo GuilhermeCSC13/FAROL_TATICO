@@ -1,10 +1,21 @@
 // src/components/tatico/ModalNovaAcao.jsx
 // Cria uma ação a partir da Central de Ações, já alocada em uma reunião.
 // Grava no mesmo formato do Copiloto, para a ação aparecer lá (na reunião e
-// nas pendências do tipo de reunião).
+// nas pendências do tipo de reunião). Visual segue o ModalDetalhesAcao.
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase, supabaseInove } from "../../supabaseClient";
-import { X, Search, Calendar, User, Paperclip, Loader2 } from "lucide-react";
+import {
+  X,
+  Search,
+  Calendar,
+  User,
+  Loader2,
+  UploadCloud,
+  Clipboard,
+  FileText,
+  ChevronDown,
+  CheckCircle,
+} from "lucide-react";
 
 const DIAS_PASSADO = 30;
 const DIAS_FUTURO = 60;
@@ -74,6 +85,7 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
   const [loadingReunioes, setLoadingReunioes] = useState(false);
   const [reuniaoQuery, setReuniaoQuery] = useState("");
   const [reuniao, setReuniao] = useState(null);
+  const [reuniaoOpen, setReuniaoOpen] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
@@ -84,6 +96,7 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
     setRespQuery("");
     setReuniao(null);
     setReuniaoQuery("");
+    setReuniaoOpen(false);
 
     (async () => {
       const { data, error } = await supabaseInove
@@ -137,8 +150,8 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
 
   const nomeTipo = (r) => (r?.tipo_reuniao_id && tiposMap[r.tipo_reuniao_id]) || r?.tipo_reuniao || "";
 
-  // Próximas reuniões primeiro; as que já passaram vão para o fim (mais recentes antes)
-  const reunioesFiltradas = useMemo(() => {
+  // Próximas (mais perto primeiro) e já realizadas (mais recentes primeiro)
+  const { futuras, passadas } = useMemo(() => {
     const q = reuniaoQuery.trim().toLowerCase();
     const agora = nowIso();
     const lista = reunioes.filter((r) => {
@@ -148,11 +161,40 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
         String(nomeTipo(r)).toLowerCase().includes(q)
       );
     });
-    const futuras = lista.filter((r) => String(r.data_hora || "") >= agora);
-    const passadas = lista.filter((r) => String(r.data_hora || "") < agora).reverse();
-    return [...futuras, ...passadas];
+    return {
+      futuras: lista.filter((r) => String(r.data_hora || "") >= agora),
+      passadas: lista.filter((r) => String(r.data_hora || "") < agora).reverse(),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reunioes, reuniaoQuery, tiposMap]);
+
+  const previews = useMemo(
+    () =>
+      arquivos.map((f, idx) => ({
+        idx,
+        name: f.name,
+        url: String(f.type || "").startsWith("image/") ? URL.createObjectURL(f) : null,
+      })),
+    [arquivos]
+  );
+
+  useEffect(() => () => previews.forEach((p) => p.url && URL.revokeObjectURL(p.url)), [previews]);
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const blob = items[i].getAsFile();
+        files.push(new File([blob], `print_${Date.now()}_${i}.png`, { type: blob.type }));
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      setArquivos((p) => [...p, ...files]);
+    }
+  };
 
   const uploadEvidencias = async (acaoId, files) => {
     const urls = [];
@@ -177,9 +219,9 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
     const vencimento = form.vencimento.trim();
 
     if (!descricao) return alert("Informe o Nome da Ação (Descrição).");
+    if (!reuniao) return alert("Selecione a reunião onde a ação será alocada.");
     if (!responsavel) return alert("Selecione o responsável.");
     if (!vencimento) return alert("Informe o vencimento.");
-    if (!reuniao) return alert("Selecione a reunião onde a ação será alocada.");
 
     setSalvando(true);
     try {
@@ -255,198 +297,298 @@ export default function ModalNovaAcao({ aberto, onClose, onCreated }) {
 
   if (!aberto) return null;
 
-  const inputCls =
-    "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  const inputInfo =
+    "border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 w-full";
+
+  const LinhaReuniao = ({ r }) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => {
+        setReuniao(r);
+        setReuniaoOpen(false);
+        setReuniaoQuery("");
+      }}
+      className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+    >
+      <div className="text-sm font-semibold text-gray-800 truncate">{r.titulo || "(sem título)"}</div>
+      <div className="text-[11px] text-gray-500 flex items-center gap-1">
+        <Calendar size={11} /> {toBRDateTime(r.data_hora)}
+        {nomeTipo(r) && nomeTipo(r) !== r.titulo && <span className="truncate">· {nomeTipo(r)}</span>}
+      </div>
+    </button>
+  );
+
+  const GrupoTitulo = ({ children }) => (
+    <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-gray-400 uppercase bg-gray-50 sticky top-0">
+      {children}
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-gray-800">Nova Ação</h2>
-          <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100">
-            <X size={20} />
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Cabeçalho */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <label className="text-xs font-semibold uppercase text-gray-400 block mb-1">Nova ação</label>
+            <input
+              type="text"
+              autoFocus
+              value={form.descricao}
+              onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
+              placeholder="Digite o nome da ação..."
+              className="w-full text-sm sm:text-base font-semibold text-gray-800 bg-blue-50/40 border border-slate-200 hover:border-blue-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all rounded-lg px-3 py-2"
+            />
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 shrink-0">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Nome da ação *</label>
-            <input
-              className={inputCls}
-              value={form.descricao}
-              onChange={(e) => setForm((p) => ({ ...p, descricao: e.target.value }))}
-              placeholder="O que precisa ser feito"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Observação</label>
-            <textarea
-              className={inputCls}
-              rows={3}
-              value={form.observacao}
-              onChange={(e) => setForm((p) => ({ ...p, observacao: e.target.value }))}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Responsável *</label>
-              <div className="relative">
-                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  className={`${inputCls} pl-8`}
-                  value={respQuery}
-                  onChange={(e) => {
-                    setRespQuery(e.target.value);
-                    setResponsavel(null);
-                    setRespOpen(true);
-                  }}
-                  onFocus={() => setRespOpen(true)}
-                  onBlur={() => setTimeout(() => setRespOpen(false), 150)}
-                  placeholder="Digite 2 letras para buscar"
-                />
-              </div>
-              {respOpen && responsaveisFiltrados.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
-                  {responsaveisFiltrados.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setResponsavel(u);
-                        setRespQuery(buildNomeSobrenome(u));
-                        setRespOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-                    >
-                      <div className="font-semibold">{buildNomeSobrenome(u)}</div>
-                      <div className="text-xs text-gray-500">{u.login || u.email}</div>
-                    </button>
-                  ))}
+        {/* Conteúdo */}
+        <div className="px-6 py-4 overflow-y-auto flex-1 space-y-6 bg-gray-50">
+          {/* INFO */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-4">
+            {/* Reunião */}
+            <div className="flex flex-col relative">
+              <span className="text-[11px] font-bold text-gray-400 uppercase mb-1">Reunião</span>
+              {reuniao ? (
+                <div className="flex items-center justify-between gap-3 border border-blue-200 bg-blue-50/60 rounded-lg px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-800 truncate">{reuniao.titulo || "(sem título)"}</div>
+                    <div className="text-[11px] text-gray-500 flex items-center gap-1">
+                      <Calendar size={11} /> {toBRDateTime(reuniao.data_hora)}
+                      {nomeTipo(reuniao) && nomeTipo(reuniao) !== reuniao.titulo && (
+                        <span className="truncate">· {nomeTipo(reuniao)}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReuniao(null);
+                      setReuniaoOpen(true);
+                    }}
+                    className="text-[11px] font-semibold text-blue-700 hover:bg-blue-100 px-2 py-1 rounded-md shrink-0"
+                  >
+                    Trocar
+                  </button>
                 </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={reuniaoQuery}
+                      onChange={(e) => {
+                        setReuniaoQuery(e.target.value);
+                        setReuniaoOpen(true);
+                      }}
+                      onFocus={() => setReuniaoOpen(true)}
+                      onBlur={() => setTimeout(() => setReuniaoOpen(false), 150)}
+                      placeholder={loadingReunioes ? "Carregando reuniões..." : "Selecione ou busque a reunião..."}
+                      className={`${inputInfo} pl-8 pr-8`}
+                    />
+                    <ChevronDown
+                      size={14}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                    />
+                  </div>
+                  {reuniaoOpen && (
+                    <div className="absolute top-[58px] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-64 overflow-y-auto">
+                      {loadingReunioes ? (
+                        <div className="p-3 text-xs text-gray-500 flex items-center gap-2">
+                          <Loader2 size={12} className="animate-spin" /> Carregando...
+                        </div>
+                      ) : futuras.length + passadas.length === 0 ? (
+                        <div className="p-3 text-xs text-gray-500">Nenhuma reunião encontrada.</div>
+                      ) : (
+                        <>
+                          {futuras.length > 0 && <GrupoTitulo>Próximas</GrupoTitulo>}
+                          {futuras.map((r) => (
+                            <LinhaReuniao key={r.id} r={r} />
+                          ))}
+                          {passadas.length > 0 && <GrupoTitulo>Já realizadas</GrupoTitulo>}
+                          {passadas.map((r) => (
+                            <LinhaReuniao key={r.id} r={r} />
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Vencimento *</label>
-              <input
-                type="date"
-                className={inputCls}
-                value={form.vencimento}
-                onChange={(e) => setForm((p) => ({ ...p, vencimento: e.target.value }))}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col relative">
+                <span className="text-[11px] font-bold text-gray-400 uppercase mb-1">Responsável</span>
+                <div className="relative">
+                  <User size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={respQuery}
+                    onChange={(e) => {
+                      setRespQuery(e.target.value);
+                      setResponsavel(null);
+                      setRespOpen(true);
+                    }}
+                    onFocus={() => setRespOpen(true)}
+                    onBlur={() => setTimeout(() => setRespOpen(false), 150)}
+                    placeholder="Nome do responsável..."
+                    className={`${inputInfo} pl-8`}
+                  />
+                </div>
+                {respOpen && responsaveisFiltrados.length > 0 && (
+                  <div className="absolute top-[58px] left-0 w-full bg-white border border-gray-200 rounded shadow-lg z-20 max-h-48 overflow-y-auto">
+                    {responsaveisFiltrados.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setResponsavel(u);
+                          setRespQuery(buildNomeSobrenome(u));
+                          setRespOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      >
+                        <div className="font-semibold text-gray-800">{buildNomeSobrenome(u)}</div>
+                        {(u.login || u.email) && <div className="text-[10px] text-gray-400">{u.login || u.email}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[11px] font-bold text-gray-400 uppercase mb-1">Vencimento</span>
+                <input
+                  type="date"
+                  value={form.vencimento}
+                  onChange={(e) => setForm((p) => ({ ...p, vencimento: e.target.value }))}
+                  className={inputInfo}
+                />
+              </div>
             </div>
           </div>
 
+          {/* DESCRIÇÃO E EVIDÊNCIAS */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Reunião *</label>
-            {reuniao ? (
-              <div className="flex items-center justify-between border border-blue-300 bg-blue-50 rounded-lg px-3 py-2">
-                <div className="text-sm">
-                  <div className="font-semibold text-gray-800">{reuniao.titulo || "(sem título)"}</div>
-                  <div className="text-xs text-gray-600 flex items-center gap-1">
-                    <Calendar size={12} /> {toBRDateTime(reuniao.data_hora)}
-                    {nomeTipo(reuniao) && <span>· {nomeTipo(reuniao)}</span>}
-                  </div>
-                </div>
-                <button type="button" onClick={() => setReuniao(null)} className="text-xs font-bold text-blue-700 hover:underline">
-                  Trocar
-                </button>
+            <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 ml-1">Descrição e Evidências Iniciais</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3 shadow-sm">
+              <div>
+                <span className="text-[11px] font-semibold text-gray-400 uppercase">Observações da Ação</span>
+                <textarea
+                  className="mt-1 w-full border border-gray-300 rounded-lg text-sm p-3 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  rows={3}
+                  value={form.observacao}
+                  onChange={(e) => setForm((p) => ({ ...p, observacao: e.target.value }))}
+                  placeholder="Descreva detalhes..."
+                />
               </div>
-            ) : (
-              <>
-                <div className="relative mb-2">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    className={`${inputCls} pl-8`}
-                    value={reuniaoQuery}
-                    onChange={(e) => setReuniaoQuery(e.target.value)}
-                    placeholder="Buscar por título ou tipo de reunião"
-                  />
-                </div>
-                <div className="border border-gray-200 rounded-lg max-h-56 overflow-auto divide-y divide-gray-100">
-                  {loadingReunioes ? (
-                    <div className="p-4 text-sm text-gray-500 flex items-center gap-2">
-                      <Loader2 size={14} className="animate-spin" /> Carregando reuniões...
+
+              <div>
+                <span className="text-[11px] font-semibold text-gray-400 uppercase block mb-2">Anexos (Abertura)</span>
+                <div className="space-y-2">
+                  <label className="flex flex-col items-center justify-center w-full h-16 border-2 border-dashed border-blue-200 rounded-lg cursor-pointer bg-blue-50/50 hover:bg-blue-50 transition-colors group">
+                    <div className="flex flex-row items-center gap-2">
+                      <UploadCloud className="w-5 h-5 text-blue-400 group-hover:text-blue-600" />
+                      <p className="text-xs text-gray-500">
+                        <span className="font-semibold text-blue-600">Carregar arquivo do PC</span>
+                      </p>
                     </div>
-                  ) : reunioesFiltradas.length === 0 ? (
-                    <div className="p-4 text-sm text-gray-500">Nenhuma reunião encontrada.</div>
-                  ) : (
-                    reunioesFiltradas.map((r) => {
-                      const passada = String(r.data_hora || "") < nowIso();
-                      return (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => setReuniao(r)}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50"
-                        >
-                          <div className="text-sm font-semibold text-gray-800">{r.titulo || "(sem título)"}</div>
-                          <div className="text-xs text-gray-500 flex items-center gap-1">
-                            <Calendar size={12} /> {toBRDateTime(r.data_hora)}
-                            {nomeTipo(r) && <span>· {nomeTipo(r)}</span>}
-                            {passada && <span className="ml-1 text-gray-400">(já realizada)</span>}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setArquivos((p) => [...p, ...files]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+
+                  <div className="relative">
+                    <textarea
+                      rows={1}
+                      value=""
+                      onChange={() => {}}
+                      onPaste={handlePaste}
+                      className="w-full border border-dashed border-slate-300 rounded-lg p-2 text-xs text-center focus:ring-2 focus:ring-blue-200 focus:border-blue-400 resize-none placeholder:text-slate-400"
+                      placeholder="Clique aqui e pressione Ctrl+V para colar um print..."
+                    />
+                    <Clipboard className="absolute right-3 top-2.5 text-slate-300 pointer-events-none" size={14} />
+                  </div>
+
+                  {previews.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-[10px] font-bold text-gray-400 uppercase mb-2">Prontos para envio:</div>
+                      <div className="flex flex-wrap gap-3">
+                        {previews.map((p) => (
+                          <div
+                            key={`${p.idx}-${p.name}`}
+                            className="relative w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden"
+                            title={p.name}
+                          >
+                            {p.url ? (
+                              <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+                                <FileText size={20} className="text-gray-400" />
+                                <span className="text-[9px] text-gray-500 truncate w-full text-center">{p.name}</span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setArquivos((prev) => prev.filter((_, j) => j !== p.idx))}
+                              className="absolute top-1 right-1 bg-white/90 rounded-full p-0.5 text-gray-500 hover:text-red-600 shadow"
+                              title="Remover"
+                            >
+                              <X size={12} />
+                            </button>
                           </div>
-                        </button>
-                      );
-                    })
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  Mostrando reuniões dos últimos {DIAS_PASSADO} dias e dos próximos {DIAS_FUTURO} dias.
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Evidências (opcional)</label>
-            <label className="flex items-center gap-2 text-sm text-blue-700 font-semibold cursor-pointer w-fit">
-              <Paperclip size={14} /> Anexar arquivos
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  setArquivos((p) => [...p, ...files]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {arquivos.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {arquivos.map((f, i) => (
-                  <li key={i} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
-                    <span className="truncate">{f.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setArquivos((p) => p.filter((_, j) => j !== i))}
-                      className="text-gray-400 hover:text-red-600"
-                    >
-                      <X size={12} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg">
-            Cancelar
-          </button>
-          <button
-            onClick={salvar}
-            disabled={salvando}
-            className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-60 flex items-center gap-2"
-          >
-            {salvando && <Loader2 size={14} className="animate-spin" />}
-            {salvando ? "Salvando..." : "Criar ação"}
-          </button>
+        {/* Rodapé */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+          <span className="text-[11px] text-amber-600 font-medium">
+            ! Nome, reunião, responsável e vencimento são obrigatórios.
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={salvar}
+              disabled={salvando}
+              className="px-6 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all transform hover:-translate-y-0.5 disabled:opacity-60 disabled:transform-none"
+            >
+              {salvando ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+              {salvando ? "Criando..." : "Criar Ação"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

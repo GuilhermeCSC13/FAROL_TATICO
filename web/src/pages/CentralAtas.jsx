@@ -644,7 +644,7 @@ export default function CentralAtas() {
     const stGravacao = String(ata.gravacao_status || "").toUpperCase();
 
     const precisaAtualizar =
-      stGravacao.includes("PROCESSANDO") || stGravacao === "PENDENTE" || stGravacao === "GRAVANDO" || stGravacao === "PRONTO_PROCESSAR";
+      stGravacao.includes("PROCESSANDO") || stGravacao === "PENDENTE" || stGravacao === "GRAVANDO" || stGravacao === "ENCERRANDO" || stGravacao === "PRONTO_PROCESSAR";
 
     if (precisaAtualizar) {
       pollingRef.current = setInterval(() => {
@@ -667,7 +667,7 @@ export default function CentralAtas() {
 
         const stGravacao = String(data.gravacao_status || "").toUpperCase();
 
-        if (!stGravacao.includes("PROCESSANDO") && stGravacao !== "PENDENTE" && stGravacao !== "GRAVANDO") {
+        if (!stGravacao.includes("PROCESSANDO") && stGravacao !== "PENDENTE" && stGravacao !== "GRAVANDO" && stGravacao !== "ENCERRANDO") {
           stopPolling();
           hydrateMediaUrls(data);
           carregarDetalhes(data);
@@ -1352,7 +1352,7 @@ Estrutura obrigatória:
     const st = String(status || "").toUpperCase();
     if (st === "CONCLUIDO")
       return <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded font-bold border border-green-200">PRONTO</span>;
-    if (st.includes("PROCESSANDO") || st.includes("RENDER"))
+    if (st.includes("PROCESSANDO") || st.includes("RENDER") || st === "ENCERRANDO")
       return <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded font-bold border border-blue-200 animate-pulse">PROCESSANDO</span>;
     if (st === "PENDENTE")
       return <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded font-bold border border-amber-200">NA FILA</span>;

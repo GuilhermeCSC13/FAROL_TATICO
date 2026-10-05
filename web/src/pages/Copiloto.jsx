@@ -40,6 +40,9 @@ import PrettyDatePicker from "../components/tatico/PrettyDatePicker";
    Helpers
 ========================= */
 
+// ENCERRANDO há mais que isso sem virar PROCESSANDO = aba caiu na finalização
+const ENCERRANDO_FOLGA_MS = 10 * 60 * 1000;
+
 function nowIso() {
   const now = new Date();
   const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -604,10 +607,19 @@ export default function Copiloto() {
   // recuperação. Uma reunião encerrada normal vira "Realizada" (mesmo que o
   // gravacao_status leve um instante pra virar PROCESSANDO), e enquanto finaliza
   // isProcessing cobre — assim o botão de recuperar NÃO aparece após o ENCERRAR.
+  // Também cobre quem clicou ENCERRAR e a aba caiu durante a finalização:
+  // fica ENCERRANDO (já com o horário certo) e, passado o tempo de folga sem
+  // virar PROCESSANDO, oferece recuperar.
+  const stGravSel = String(selecionada?.gravacao_status || "").toUpperCase();
+  const encerrandoParado =
+    stGravSel === "ENCERRANDO" &&
+    !!selecionada?.updated_at &&
+    Date.now() - new Date(selecionada.updated_at).getTime() > ENCERRANDO_FOLGA_MS;
   const gravacaoTravada =
     !!selecionada?.id &&
-    String(selecionada?.gravacao_status || "").toUpperCase() === "GRAVANDO" &&
-    String(selecionada?.status || "").trim().toLowerCase() !== "realizada" &&
+    ((stGravSel === "GRAVANDO" &&
+      String(selecionada?.status || "").trim().toLowerCase() !== "realizada") ||
+      encerrandoParado) &&
     !isProcessing &&
     !(isRecording && current?.reuniaoId === selecionada.id);
 
