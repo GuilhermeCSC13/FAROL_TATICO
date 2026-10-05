@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/tatico/Layout';
 import { supabase } from '../supabaseClient';
-import { CheckCircle, ExternalLink, Search, Trash2, User, Calendar, Clock, AlertCircle, BarChart2, List } from 'lucide-react';
+import { CheckCircle, ExternalLink, Search, Trash2, User, Calendar, Clock, AlertCircle, BarChart2, List, Plus } from 'lucide-react';
 import ModalDetalhesAcao from '../components/tatico/ModalDetalhesAcao';
 import { ehHtml, abrirHtmlSeguro } from '../utils/abrirHtml';
+import ModalNovaAcao from '../components/tatico/ModalNovaAcao';
 
 // Normaliza um nome para deduplicar (case+espaço-insensível)
 const normNome = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -36,6 +37,7 @@ const GestaoAcoes = () => {
 
   const [acaoSelecionada, setAcaoSelecionada] = useState(null);
   const [showModalDetalhes, setShowModalDetalhes] = useState(false);
+  const [showModalNova, setShowModalNova] = useState(false);
   
   // Filtros
   const [filtroTexto, setFiltroTexto] = useState('');
@@ -262,6 +264,15 @@ const GestaoAcoes = () => {
               </button>
             </div>
             
+            <button
+              type="button"
+              onClick={() => setShowModalNova(true)}
+              className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-4 py-2 rounded-lg font-black text-xs tracking-wide shadow-sm active:scale-95 transition-all flex items-center gap-2"
+              title="Criar uma ação e alocar em uma reunião"
+            >
+              <Plus size={14} /> NOVA AÇÃO
+            </button>
+
             {viewMode === 'lista' && (
               <>
                 <button
@@ -527,6 +538,12 @@ const GestaoAcoes = () => {
           onConcluir={() => acaoSelecionada && handleConcluir(acaoSelecionada.id)}
           onAfterSave={handleAfterSave}
           onAfterDelete={handleAfterDelete}
+        />
+
+        <ModalNovaAcao
+          aberto={showModalNova}
+          onClose={() => setShowModalNova(false)}
+          onCreated={() => fetchAcoes()}
         />
       </div>
     </Layout>

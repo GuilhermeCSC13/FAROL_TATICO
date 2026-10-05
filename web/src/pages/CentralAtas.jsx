@@ -41,6 +41,7 @@ import {
   RefreshCw,
   FileVideo,
   Hourglass,
+  AlertTriangle,
 } from "lucide-react";
 
 // --- HELPER: Formatar Duração Real ---
@@ -1355,6 +1356,8 @@ Estrutura obrigatória:
       return <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded font-bold border border-blue-200 animate-pulse">PROCESSANDO</span>;
     if (st === "PENDENTE")
       return <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded font-bold border border-amber-200">NA FILA</span>;
+    if (st === "ERRO")
+      return <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded font-bold border border-red-200">ERRO</span>;
     return <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded font-bold border border-slate-200">AGUARDANDO</span>;
   };
 
@@ -1686,6 +1689,18 @@ Estrutura obrigatória:
                             <div>
                               <h4 className="font-bold text-slate-700">Na Fila de Espera</h4>
                               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">Solicitado! O Robô iniciará no próximo ciclo (máx 10min).</p>
+                            </div>
+                          </>
+                        ) : selectedAta.gravacao_status === "ERRO" ? (
+                          <>
+                            <div className="p-4 bg-red-100 rounded-full text-red-600">
+                              <AlertTriangle size={32} />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-red-700">Falha no processamento da gravação</h4>
+                              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto break-words">
+                                {selectedAta.gravacao_erro || "Motivo não registrado."}
+                              </p>
                             </div>
                           </>
                         ) : (
