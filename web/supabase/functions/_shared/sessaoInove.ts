@@ -12,6 +12,9 @@
 // serviço do INOVE mora aqui. Segredo necessário: INOVE_ANON_KEY (a chave pública do INOVE).
 const INOVE_URL = Deno.env.get("INOVE_URL") ?? "https://wboelthngddvkgrvwkbu.supabase.co";
 const INOVE_ANON = Deno.env.get("INOVE_ANON_KEY") ?? "";
+// TRANSIÇÃO: com FAROL_EXIGE_LOGIN=0 quem chega SEM o cabeçalho ainda passa (o site antigo, até o novo
+// ser publicado); quem manda o cabeçalho é conferido sempre. Sem a variável = exige (o normal).
+const EXIGE_LOGIN = (Deno.env.get("FAROL_EXIGE_LOGIN") ?? "1").trim() !== "0";
 
 export const CABECALHOS_CORS = "authorization, x-client-info, apikey, content-type, x-inove-token";
 
@@ -19,7 +22,13 @@ export type Sessao = { ok: true; nome: string; nivel: string } | { ok: false; st
 
 export async function conferirSessaoInove(req: Request): Promise<Sessao> {
   const token = (req.headers.get("x-inove-token") ?? "").trim();
-  if (!token) return { ok: false, status: 401, erro: "sem sessão do INOVE — entre no Farol de novo" };
+  if (!token) {
+    if (!EXIGE_LOGIN) {
+      console.warn("chamada sem sessão do INOVE aceita (FAROL_EXIGE_LOGIN=0, transição)");
+      return { ok: true, nome: "(transição)", nivel: "" };
+    }
+    return { ok: false, status: 401, erro: "sem sessão do INOVE — entre no Farol de novo" };
+  }
   if (!INOVE_ANON) return { ok: false, status: 500, erro: "função sem configuração (INOVE_ANON_KEY)" };
   const h = { apikey: INOVE_ANON, Authorization: `Bearer ${token}` };
 
