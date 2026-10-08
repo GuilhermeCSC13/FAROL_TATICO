@@ -3,10 +3,12 @@
 // fica como secret no Supabase (GEMINI_API_KEY), nunca chega no bundle.
 
 import { supabase } from "../supabaseClient";
+import { cabecalhoSessaoInove } from "../utils/sessaoInove";
 
 async function callProxy(prompt, { model = "gemini-2.5-pro" } = {}) {
   const { data, error } = await supabase.functions.invoke("gemini-proxy", {
     body: { model, prompt },
+    headers: await cabecalhoSessaoInove(),
   });
   if (error) {
     throw new Error(error.message || "Falha ao chamar gemini-proxy");

@@ -20,13 +20,14 @@
 //   GEMINI_API_KEY  -> chave criada em https://aistudio.google.com/apikey
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { CABECALHOS_CORS, conferirSessaoInove } from "../_shared/sessaoInove.ts";
 
 const API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const DEFAULT_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-pro";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": CABECALHOS_CORS,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -54,6 +55,12 @@ serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "use POST" }, 405);
   if (!API_KEY) return json({ error: "GEMINI_API_KEY ausente" }, 500);
 
+  // só quem está logado no INOVE com o Farol liberado (ver _shared/sessaoInove.ts)
+  const sessao = await conferirSessaoInove(req);
+  // 200 com { ok:false }: o functions.invoke joga fora o corpo de resposta não-2xx e a tela só
+  // mostraria "non-2xx status code" em vez do motivo
+  if (!sessao.ok) return json({ ok: false, error: sessao.erro });
+
   let body: any = {};
   try {
     body = await req.json();
@@ -67,7 +74,20 @@ serve(async (req: Request) => {
   // manda `{ mediaUrl, mimeType }` em vez de inlineData (que estoura o
   // limite de body das Edge Functions com audios/videos longos).
   async function uploadFromUrl(mediaUrl: string, mimeType: string) {
-    const r = await fetch(mediaUrl);
+    // só arquivo do armazenamento do PRÓPRIO Farol: sem isso, a função baixava qualquer endereço
+    // que mandassem (inclusive da rede interna do servidor) e mandava para o Google
+    // (compara o endereço já interpretado: origem exata e caminho sem "..")
+    let alvo: URL;
+    try {
+      alvo = new URL(mediaUrl);
+    } catch {
+      throw new Error("mediaUrl inválida");
+    }
+    const base = new URL(Deno.env.get("SUPABASE_URL") ?? "https://invalido.local");
+    if (alvo.protocol !== "https:" || alvo.origin !== base.origin || !alvo.pathname.startsWith("/storage/v1/object/")) {
+      throw new Error("mediaUrl fora do armazenamento do Farol");
+    }
+    const r = await fetch(alvo);
     if (!r.ok) throw new Error(`Falha ao baixar mediaUrl (${r.status})`);
     const bytes = await r.arrayBuffer();
     const up = await fetch(

@@ -15,6 +15,7 @@
 //   GOOGLE_CALENDAR_ID     <- "primary" ou ID especifico
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { CABECALHOS_CORS, conferirSessaoInove } from "../_shared/sessaoInove.ts";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
@@ -23,7 +24,7 @@ const CALENDAR_ID = Deno.env.get("GOOGLE_CALENDAR_ID") ?? "primary";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": CABECALHOS_CORS,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -121,6 +122,15 @@ serve(async (req) => {
       JSON.stringify({ error: "Google secrets nao configurados no Supabase." }),
       { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
     );
+  }
+
+  // só quem está logado no INOVE com o Farol liberado (ver _shared/sessaoInove.ts): antes qualquer
+  // um criava, mudava ou apagava evento na agenda do admin e mandava convite em nome dela
+  const sessao = await conferirSessaoInove(req);
+  if (!sessao.ok) {
+    return new Response(JSON.stringify({ error: sessao.erro }), {
+      status: sessao.status, headers: { ...CORS, "Content-Type": "application/json" },
+    });
   }
 
   try {

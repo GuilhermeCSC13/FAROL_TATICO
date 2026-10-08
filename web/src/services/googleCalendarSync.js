@@ -3,6 +3,7 @@
 // interrompem o fluxo principal da UI (a reuniao ja foi salva no banco).
 
 import { supabase } from "../supabaseClient";
+import { cabecalhoSessaoInove } from "../utils/sessaoInove";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -14,6 +15,7 @@ async function invokeGoogleCalendar(body) {
       apikey: supabaseAnonKey,
       Authorization: `Bearer ${supabaseAnonKey}`,
       "Content-Type": "application/json",
+      ...(await cabecalhoSessaoInove()),
     },
     body: JSON.stringify(body),
   });
